@@ -1,8 +1,9 @@
 using System.Text.RegularExpressions;
 using Newtonsoft.Json.Linq;
-using Douyin.Live.Models;
+using API.Douyin.Models;
+using Recorder.Shared;
 
-namespace Douyin.Live.Services;
+namespace API.Douyin.Services;
 
 public class ApiService
 {
@@ -105,7 +106,7 @@ public class ApiService
         if (string.IsNullOrEmpty(webRid))
             throw new Exception("无法获取webRid");
 
-        var userUniqueId = GenerateRandomNumber(12);
+        var userUniqueId = SharedUtils.GenerateRandomId(12);
         var room = roomJson["data"]?["room"];
         var owner = room?["owner"];
         var status = room?["status"]?.ToObject<int>() ?? 0;
@@ -128,7 +129,7 @@ public class ApiService
             Url = $"https://live.douyin.com/{webRid}",
             Introduction = owner?["signature"]?.ToString() ?? "",
             RawData = isLive ? room?["stream_url"] : null,
-            DanmakuData = new DanmakuArgs
+            DanmakuData = new Recorder.Shared.DanmakuArgs
             {
                 WebRid = webRid,
                 RoomId = roomId,
@@ -157,7 +158,7 @@ public class ApiService
         var roomData = data["data"]?[0];
         var userData = data["user"];
         var roomId = roomData?["id_str"]?.ToString() ?? "";
-        var userUniqueId = GenerateRandomNumber(12);
+        var userUniqueId = SharedUtils.GenerateRandomId(12);
         var owner = roomData?["owner"];
         var isLive = roomData?["status"]?.ToObject<int>() == 2;
         var cookie = await _cookieService.GetCookieAsync();
@@ -180,7 +181,7 @@ public class ApiService
             Url = $"https://live.douyin.com/{webRid}",
             Introduction = owner?["signature"]?.ToString() ?? "",
             RawData = isLive ? roomData?["stream_url"] : null,
-            DanmakuData = new DanmakuArgs
+            DanmakuData = new Recorder.Shared.DanmakuArgs
             {
                 WebRid = webRid,
                 RoomId = roomId,
@@ -197,7 +198,7 @@ public class ApiService
         var owner = room?["owner"];
         var anchor = roomData["roomStore"]?["roomInfo"]?["anchor"];
         var roomId = room?["id_str"]?.ToString() ?? "";
-        var userUniqueId = roomData["userStore"]?["odin"]?["user_unique_id"]?.ToString() ?? GenerateRandomNumber(12);
+        var userUniqueId = roomData["userStore"]?["odin"]?["user_unique_id"]?.ToString() ?? SharedUtils.GenerateRandomId(12);
         var isLive = room?["status"]?.ToObject<int>() == 2;
         var cookie = await _cookieService.GetCookieAsync();
 
@@ -219,7 +220,7 @@ public class ApiService
             Url = $"https://live.douyin.com/{webRid}",
             Introduction = owner?["signature"]?.ToString() ?? "",
             RawData = isLive ? room?["stream_url"] : null,
-            DanmakuData = new DanmakuArgs
+            DanmakuData = new Recorder.Shared.DanmakuArgs
             {
                 WebRid = webRid,
                 RoomId = roomId,
@@ -259,14 +260,14 @@ public class ApiService
         var cookie = await _cookieService.GetCookieAsync();
 
         // 单独获取 www.douyin.com 域的 cookie
-        var wwwCookie = await Utils.HttpUtils.HeadAsync("https://www.douyin.com/", new()
+        var wwwCookie = await HttpUtils.HeadAsync("https://www.douyin.com/", new()
         {
             ["User-Agent"] = _signature.GetUserAgent(),
             ["Referer"] = "https://www.douyin.com"
         });
         var mergedCookie = string.IsNullOrEmpty(wwwCookie) ? cookie : wwwCookie;
 
-        var resp = await Utils.HttpUtils.GetStringAsync($"https://www.douyin.com/user/{uniqueId}", new()
+        var resp = await HttpUtils.GetStringAsync($"https://www.douyin.com/user/{uniqueId}", new()
         {
             ["User-Agent"] = _signature.GetUserAgent(),
             ["Referer"] = "https://www.douyin.com",
@@ -340,7 +341,7 @@ public class ApiService
         var scriptMatches = Regex.Matches(resp,
             @"<script[^>]*>([\s\S]*?)</script>",
             RegexOptions.Singleline | RegexOptions.IgnoreCase);
-        foreach (System.Text.RegularExpressions.Match sm in scriptMatches)
+        foreach (Match sm in scriptMatches)
         {
             var content = sm.Groups[1].Value;
             if (content.Contains("\"userStore\"") || content.Contains("userStore"))
@@ -428,7 +429,7 @@ public class ApiService
             ["user-agent"] = _signature.GetUserAgent()
         };
 
-        var resp = await Utils.HttpUtils.GetStringAsync(url, headers);
+        var resp = await HttpUtils.GetStringAsync(url, headers);
         if (resp == "" || resp == "blocked")
             throw new Exception("抖音直播搜索被限制，请稍后再试");
 
@@ -503,7 +504,7 @@ public class ApiService
         };
 
         var url = $"https://webcast.amemv.com/webcast/room/reflow/info/?{BuildQueryString(query)}";
-        var resp = await Utils.HttpUtils.GetStringAsync(url, await GetHeadersAsync());
+        var resp = await HttpUtils.GetStringAsync(url, await GetHeadersAsync());
         return JObject.Parse(resp);
     }
 
@@ -535,7 +536,7 @@ public class ApiService
         var signedUrl = await _signature.GenerateABogusAsync(baseUrl, _signature.GetUserAgent());
 
         var headers = await GetHeadersAsync($"https://live.douyin.com/{webRid}");
-        var resp = await Utils.HttpUtils.GetStringAsync(signedUrl, headers);
+        var resp = await HttpUtils.GetStringAsync(signedUrl, headers);
         return JObject.Parse(resp)["data"] ?? throw new Exception("API返回数据为空");
     }
 
@@ -552,20 +553,20 @@ public class ApiService
         };
 
         var url = $"https://webcast.amemv.com/webcast/room/reflow/info/?{BuildQueryString(query)}";
-        var resp = await Utils.HttpUtils.GetStringAsync(url, await GetHeadersAsync());
+        var resp = await HttpUtils.GetStringAsync(url, await GetHeadersAsync());
         return JObject.Parse(resp);
     }
 
     private async Task<JToken> GetRoomDataByHtmlAsync(string webRid)
     {
-        var headCookie = await Utils.HttpUtils.HeadAsync($"https://live.douyin.com/{webRid}", new()
+        var headCookie = await HttpUtils.HeadAsync($"https://live.douyin.com/{webRid}", new()
         {
             ["User-Agent"] = _signature.GetUserAgent(),
             ["Referer"] = Referer,
             ["Authority"] = Authority
         });
 
-        var resp = await Utils.HttpUtils.GetStringAsync($"https://live.douyin.com/{webRid}", new()
+        var resp = await HttpUtils.GetStringAsync($"https://live.douyin.com/{webRid}", new()
         {
             ["User-Agent"] = _signature.GetUserAgent(),
             ["Referer"] = Referer,
@@ -666,15 +667,5 @@ public class ApiService
     {
         return string.Join("&", parameters.Select(kvp =>
             $"{Uri.EscapeDataString(kvp.Key)}={Uri.EscapeDataString(kvp.Value)}"));
-    }
-
-    private static string GenerateRandomNumber(int length)
-    {
-        var random = Random.Shared;
-        var chars = new char[length];
-        chars[0] = (char)('1' + random.Next(0, 9));
-        for (int i = 1; i < length; i++)
-            chars[i] = (char)('0' + random.Next(0, 10));
-        return new string(chars);
     }
 }

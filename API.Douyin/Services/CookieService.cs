@@ -1,4 +1,6 @@
-namespace Douyin.Live.Services;
+using Recorder.Shared;
+
+namespace API.Douyin.Services;
 
 public class CookieService
 {
@@ -17,7 +19,7 @@ public class CookieService
 
         try
         {
-            var setCookie = await Utils.HttpUtils.HeadAsync("https://live.douyin.com", new()
+            var setCookie = await HttpUtils.HeadAsync("https://live.douyin.com", new()
             {
                 ["User-Agent"] = _signature.GetUserAgent(),
                 ["Referer"] = "https://live.douyin.com"
@@ -28,9 +30,7 @@ public class CookieService
                 .FirstOrDefault(c => c.StartsWith("ttwid", StringComparison.OrdinalIgnoreCase));
 
             if (ttwid != null)
-            {
                 _cookie = ttwid;
-            }
         }
         catch
         {

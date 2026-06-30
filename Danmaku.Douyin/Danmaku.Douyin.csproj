@@ -1,10 +1,9 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <RootNamespace>DouyinDanmaku</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>
@@ -14,8 +13,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <EmbeddedResource Include="Services\abogus.js" LogicalName="DouyinDanmaku.Services.abogus.js" />
-    <EmbeddedResource Include="Services\mssdk.js" LogicalName="DouyinDanmaku.Services.mssdk.js" />
+    <ProjectReference Include="..\Recorder.Shared\Recorder.Shared.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Services\mssdk.js" />
+    <EmbeddedResource Include="Services\abogus.js" />
   </ItemGroup>
 
 </Project>
