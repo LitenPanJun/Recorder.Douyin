@@ -52,6 +52,11 @@ public class FlvDownloadService
         progressState.TotalBytes = response.Content.Headers.ContentLength;
         await using var responseStream = await response.Content.ReadAsStreamAsync(token);
 
+        var headerBuf = new byte[13];
+        var headerRead = await responseStream.ReadAsync(headerBuf.AsMemory(0, 13), token);
+        if (headerRead < 13 || headerBuf[0] != 'F' || headerBuf[1] != 'L' || headerBuf[2] != 'V')
+            throw new InvalidDataException("响应数据不是合法的 FLV 流");
+
         var buffer = new byte[81920];
         var segmentStartTime = stopwatch.Elapsed;
         FileStream? currentSegment = null;
@@ -75,7 +80,11 @@ public class FlvDownloadService
                     segmentStartTime = stopwatch.Elapsed;
                     segmentFiles.Add(currentSegmentPath);
 
-                    if (segmentIndex > 1 && segmentPrefix != null)
+                    if (segmentIndex == 1)
+                    {
+                        await currentSegment.WriteAsync(headerBuf.AsMemory(0, 13), token);
+                    }
+                    else if (segmentPrefix != null)
                     {
                         var expectedPts = (segmentIndex - 1) * (long)segDuration.TotalMilliseconds;
                         segmentPrefix = AdjustCodecPts(segmentPrefix, expectedPts, expectedPts);
@@ -176,14 +185,15 @@ public class FlvDownloadService
                 var finalPath = currentSegmentPath!;
                 var fileSize = new FileInfo(finalPath).Length;
 
-                if (fileSize < 65536)
+                if (segmentIndex > 1 && segmentPrefix != null
+                    && fileSize < segmentPrefix.Length + 4096)
                 {
                     try { File.Delete(finalPath); } catch { }
                     segmentFiles.Remove(finalPath);
                     Console.Error.WriteLine(
                         $"[FlvDownload] 分段 {segmentIndex} 数据过小 ({fileSize}B)，已删除");
                 }
-                else if (onSegmentCompleted != null)
+                else if (fileSize > 0 && onSegmentCompleted != null)
                 {
                     try
                     {
@@ -201,9 +211,6 @@ public class FlvDownloadService
         progressState.Elapsed = stopwatch.Elapsed;
         progressState.CurrentSegment = "下载完成";
         progress?.Report(progressState);
-
-        segmentFiles.RemoveAll(f => new FileInfo(f).Length < 65536);
-        segmentIndex = segmentFiles.Count;
 
         return new DownloadResult
         {
