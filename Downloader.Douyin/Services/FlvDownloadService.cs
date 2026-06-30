@@ -52,11 +52,6 @@ public class FlvDownloadService
         progressState.TotalBytes = response.Content.Headers.ContentLength;
         await using var responseStream = await response.Content.ReadAsStreamAsync(token);
 
-        var headerBuf = new byte[13];
-        var headerRead = await responseStream.ReadAsync(headerBuf.AsMemory(0, 13), token);
-        if (headerRead < 13 || headerBuf[0] != 'F' || headerBuf[1] != 'L' || headerBuf[2] != 'V')
-            throw new InvalidDataException("响应数据不是合法的 FLV 流");
-
         var buffer = new byte[81920];
         var segmentStartTime = stopwatch.Elapsed;
         FileStream? currentSegment = null;
@@ -83,7 +78,7 @@ public class FlvDownloadService
 
                     if (segmentIndex == 1)
                     {
-                        await currentSegment.WriteAsync(headerBuf.AsMemory(0, 13), token);
+                        // Segment 1: nothing extra to write before the main loop data
                     }
                     else if (segmentPrefix != null)
                     {
@@ -122,25 +117,45 @@ public class FlvDownloadService
                     buffer, 0, buffer.Length, token);
                 if (bytesRead == 0) break;
 
-                var writeOffset = 0;
+                var bytesToLog = bytesRead;
+
                 if (segmentIndex == 1 && !metadataSkipped)
                 {
-                    var skip = SkipMetadataTag(buffer, bytesRead);
-                    if (skip > 0)
+                    var tagEnd = SkipMetadataTag(buffer, bytesRead);
+                    if (tagEnd > 13)
                     {
-                        writeOffset = skip;
+                        // buffer[0..13] = FLV header + PreviousTagSize (keep)
+                        // buffer[13..tagEnd] = onMetaData tag (skip)
+                        // buffer[tagEnd..] = remaining data (keep)
+                        await currentSegment.WriteAsync(buffer, 0, 13, token);
+                        var rest = bytesRead - tagEnd;
+                        if (rest > 0)
+                            await currentSegment.WriteAsync(buffer, tagEnd, rest, token);
+
+                        seg1Raw.AddRange(buffer.AsSpan(0, 13));
+                        if (rest > 0)
+                            seg1Raw.AddRange(buffer.AsSpan(tagEnd, rest));
+
+                        bytesToLog = 13 + rest;
                         metadataSkipped = true;
                     }
+                    else
+                    {
+                        await currentSegment.WriteAsync(buffer, 0, bytesRead, token);
+                        seg1Raw.AddRange(buffer.AsSpan(0, bytesRead));
+                    }
+                }
+                else
+                {
+                    await currentSegment.WriteAsync(buffer, 0, bytesRead, token);
+                    if (segmentIndex == 1 && segmentPrefix == null)
+                        seg1Raw.AddRange(buffer.AsSpan(0, bytesRead));
                 }
 
-                await currentSegment.WriteAsync(buffer, writeOffset, bytesRead - writeOffset, token);
-                totalDownloaded += bytesRead - writeOffset;
+                totalDownloaded += bytesToLog;
 
                 if (segmentIndex == 1 && segmentPrefix == null)
                 {
-                    if (seg1Raw.Count == 0)
-                        seg1Raw.AddRange(headerBuf);
-                    seg1Raw.AddRange(buffer.AsSpan(writeOffset, bytesRead - writeOffset));
                     if (TryExtractFlvPrefix(seg1Raw, out var prefix))
                         segmentPrefix = prefix;
                 }
