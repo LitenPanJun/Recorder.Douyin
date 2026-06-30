@@ -1,7 +1,8 @@
-using System.Security.Cryptography;
-using System.Text;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using Recorder.Shared;
 
-namespace Douyin.Live.Services;
+namespace API.Douyin.Services;
 
 public interface ISignatureProvider
 {
@@ -21,23 +22,16 @@ public class SignatureService : ISignatureProvider
 
     public string GenerateMsToken(int length = 107)
     {
-        const string chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-        var data = RandomNumberGenerator.GetBytes(length);
-        var result = new char[length];
-        for (var i = 0; i < length; i++)
-        {
-            result[i] = chars[data[i] % chars.Length];
-        }
-        return new string(result);
+        return SharedUtils.GenerateMsToken(length);
     }
 
     public async Task<string> GenerateABogusAsync(string url, string userAgent)
     {
         try
         {
-            var payload = Newtonsoft.Json.JsonConvert.SerializeObject(new { url, userAgent });
-            var resp = await Utils.HttpUtils.PostJsonAsync(AbogusEndpoint, payload);
-            var obj = Newtonsoft.Json.Linq.JObject.Parse(resp);
+            var payload = JsonConvert.SerializeObject(new { url, userAgent });
+            var resp = await HttpUtils.PostJsonAsync(AbogusEndpoint, payload);
+            var obj = JObject.Parse(resp);
             return obj["data"]?["url"]?.ToString() ?? url;
         }
         catch

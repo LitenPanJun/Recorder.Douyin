@@ -1,4 +1,4 @@
-namespace Douyin.Live.Models;
+namespace Recorder.Shared;
 
 public class DanmakuArgs
 {

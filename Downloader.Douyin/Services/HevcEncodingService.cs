@@ -2,7 +2,7 @@ using System.Diagnostics;
 using System.Text;
 using System.Text.RegularExpressions;
 
-namespace Douyin.StreamDownloader.Services;
+namespace Downloader.Douyin.Services;
 
 public class HevcEncodingService
 {
@@ -74,7 +74,7 @@ public class HevcEncodingService
 
         var progressTask = Task.Run(async () =>
         {
-            while (!process.StandardError.EndOfStream && !ct.IsCancellationRequested)
+            while (!ct.IsCancellationRequested)
             {
                 var line = await process.StandardError.ReadLineAsync(ct);
                 if (line == null) break;

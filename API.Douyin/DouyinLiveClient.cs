@@ -1,7 +1,7 @@
-using Douyin.Live.Models;
-using Douyin.Live.Services;
+using API.Douyin.Models;
+using API.Douyin.Services;
 
-namespace Douyin.Live;
+namespace API.Douyin;
 
 public class DouyinLiveClient
 {

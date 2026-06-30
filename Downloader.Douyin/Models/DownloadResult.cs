@@ -1,4 +1,4 @@
-namespace Douyin.StreamDownloader.Models;
+namespace Downloader.Douyin.Models;
 
 public class DownloadResult
 {

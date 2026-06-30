@@ -1,6 +1,6 @@
 using Newtonsoft.Json.Linq;
 
-namespace Douyin.Live.Models;
+namespace API.Douyin.Models;
 
 public class LiveRoomDetail
 {
@@ -14,5 +14,5 @@ public class LiveRoomDetail
     public string Url { get; init; } = string.Empty;
     public string Introduction { get; init; } = string.Empty;
     public JToken? RawData { get; init; }
-    public DanmakuArgs? DanmakuData { get; init; }
+    public Recorder.Shared.DanmakuArgs? DanmakuData { get; init; }
 }

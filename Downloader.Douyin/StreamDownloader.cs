@@ -1,8 +1,8 @@
 using System.Diagnostics;
-using Douyin.StreamDownloader.Models;
-using Douyin.StreamDownloader.Services;
+using Downloader.Douyin.Models;
+using Downloader.Douyin.Services;
 
-namespace Douyin.StreamDownloader;
+namespace Downloader.Douyin;
 
 public class StreamDownloader
 {

@@ -1,7 +1,9 @@
 using System.Diagnostics;
-using Douyin.StreamDownloader.Models;
+using System.Net;
+using Downloader.Douyin.Models;
+using Recorder.Shared;
 
-namespace Douyin.StreamDownloader.Services;
+namespace Downloader.Douyin.Services;
 
 public class FlvDownloadService
 {
@@ -10,15 +12,7 @@ public class FlvDownloadService
 
     public FlvDownloadService()
     {
-        var handler = new HttpClientHandler
-        {
-            AllowAutoRedirect = true,
-            AutomaticDecompression = System.Net.DecompressionMethods.None
-        };
-        _http = new HttpClient(handler)
-        {
-            Timeout = TimeSpan.FromHours(4)
-        };
+        _http = HttpUtils.CreateClient(TimeSpan.FromHours(4), DecompressionMethods.None);
     }
 
     public async Task<DownloadResult> DownloadAsync(

@@ -1,4 +1,4 @@
-namespace Douyin.Live.Models;
+namespace API.Douyin.Models;
 
 public class PlayQuality
 {
