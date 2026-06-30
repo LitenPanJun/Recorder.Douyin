@@ -42,7 +42,6 @@ public class HevcEncodingService
             throw new FileNotFoundException($"Input file not found: {inputFile}");
 
         outputFile ??= Path.ChangeExtension(inputFile, ".mkv");
-        var tempFile = outputFile + ".tmp";
 
         var args = $"-i \"{inputFile}\" " +
                    $"-c:v libx265 " +
@@ -50,8 +49,7 @@ public class HevcEncodingService
                    $"-preset medium " +
                    $"-tag:v hvc1 " +
                    $"-c:a copy " +
-                   $"-f matroska " +
-                   $"-y \"{tempFile}\"";
+                   $"-y \"{outputFile}\"";
 
         Console.Error.WriteLine($"[ffmpeg] Encoding: {Path.GetFileName(inputFile)} -> {Path.GetFileName(outputFile)}");
 
@@ -135,12 +133,10 @@ public class HevcEncodingService
             var stderr = stderrBuilder.ToString();
             Console.Error.WriteLine($"[ffmpeg] Failed (exit code {process.ExitCode}):");
             Console.Error.WriteLine(stderr.Length > 500 ? stderr[..500] + "..." : stderr);
-            try { File.Delete(tempFile); } catch { }
             throw new Exception(
                 $"ffmpeg encode failed (exit {process.ExitCode})\n{stderr}");
         }
 
-        try { File.Move(tempFile, outputFile, overwrite: true); } catch { }
         var outSize = new FileInfo(outputFile).Length;
         Console.Error.WriteLine($"[ffmpeg] Done: {Path.GetFileName(outputFile)} ({outSize / 1024.0 / 1024:F1} MB)");
         progress?.Report(100);

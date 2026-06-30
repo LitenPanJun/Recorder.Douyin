@@ -26,11 +26,11 @@ public static class SegmentMerger
 
         var ext = Path.GetExtension(segmentFiles[0]).ToLowerInvariant();
 
-        if (ext == ".flv")
-            return MergeFlvBinary(segmentFiles, outputPath);
-
         if (FfmpegPath != null)
             return await MergeWithFfmpegAsync(segmentFiles, outputPath, ext, progress, ct);
+
+        if (ext == ".flv")
+            return MergeFlvBinary(segmentFiles, outputPath);
 
         throw new InvalidOperationException(
             $"ffmpeg is required to merge {ext} files. Please install ffmpeg and ensure it's in PATH.");
@@ -52,7 +52,7 @@ public static class SegmentMerger
             var lines = segmentFiles.Select(f => $"file '{f.Replace("'", "'\\''")}'");
             await File.WriteAllTextAsync(concatFile, string.Join("\n", lines), Encoding.UTF8, ct);
 
-            var args = $"-f concat -safe 0 -i \"{concatFile}\" -c copy -y \"{outputPath}\"";
+            var args = $"-f concat -safe 0 -i \"{concatFile}\" -c copy -map_metadata -1 -y \"{outputPath}\"";
 
             var startInfo = new ProcessStartInfo
             {
