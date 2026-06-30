@@ -152,6 +152,7 @@ public class FlvDownloadService
                     if (segmentIndex > 0 && currentSegment!.Length < minSegBytes)
                         continue;
 
+                    await currentSegment.FlushAsync(token);
                     await currentSegment.DisposeAsync();
                     var completedPath = currentSegmentPath!;
                     var completedIndex = segmentIndex;
@@ -181,17 +182,19 @@ public class FlvDownloadService
         {
             if (currentSegment != null)
             {
+                await currentSegment.FlushAsync(token);
                 await currentSegment.DisposeAsync();
                 var finalPath = currentSegmentPath!;
                 var fileSize = new FileInfo(finalPath).Length;
 
-                if (segmentIndex > 1 && segmentPrefix != null
-                    && fileSize < segmentPrefix.Length + 4096)
+                var minBytes = segmentPrefix != null
+                    ? segmentPrefix.Length + 4096 : 4096;
+                if (fileSize < minBytes)
                 {
                     try { File.Delete(finalPath); } catch { }
                     segmentFiles.Remove(finalPath);
                     Console.Error.WriteLine(
-                        $"[FlvDownload] 分段 {segmentIndex} 数据过小 ({fileSize}B)，已删除");
+                        $"[FlvDownload] 分段 {segmentIndex} 数据不完整 ({fileSize}B)，已删除");
                 }
                 else if (fileSize > 0 && onSegmentCompleted != null)
                 {
