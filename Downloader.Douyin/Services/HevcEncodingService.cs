@@ -23,8 +23,9 @@ public class HevcEncodingService
         }
     }
 
-    public bool IsAvailable => FfmpegPath != null;
+    public static bool IsAvailable => FfmpegPath != null;
     public static string? NotAvailableReason => FfmpegNotFoundReason;
+    public static string? FfmpegExecutablePath => FfmpegPath;
 
     public async Task EncodeAsync(
         string inputFile,

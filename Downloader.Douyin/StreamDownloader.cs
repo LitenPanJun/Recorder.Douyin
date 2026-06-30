@@ -32,7 +32,7 @@ public class StreamDownloader
         var encodeFail = 0;
         var encodeCancel = 0;
 
-        if (enableHevc && !_hevcEncoder.IsAvailable)
+        if (enableHevc && !HevcEncodingService.IsAvailable)
         {
             var reason = HevcEncodingService.NotAvailableReason ?? "未知原因";
             Console.Error.WriteLine($"[错误] 无法启用 HEVC 编码: {reason}");
