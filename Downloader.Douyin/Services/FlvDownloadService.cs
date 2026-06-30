@@ -126,6 +126,8 @@ public class FlvDownloadService
 
                 if (segmentIndex == 1 && segmentPrefix == null)
                 {
+                    if (seg1Raw.Count == 0)
+                        seg1Raw.AddRange(headerBuf);
                     seg1Raw.AddRange(buffer.AsSpan(0, bytesRead));
                     if (TryExtractFlvPrefix(seg1Raw, out var prefix))
                         segmentPrefix = prefix;
