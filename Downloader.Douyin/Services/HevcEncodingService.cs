@@ -74,7 +74,7 @@ public class HevcEncodingService
 
         var progressTask = Task.Run(async () =>
         {
-            while (!process.StandardError.EndOfStream && !ct.IsCancellationRequested)
+            while (!ct.IsCancellationRequested)
             {
                 var line = await process.StandardError.ReadLineAsync(ct);
                 if (line == null) break;
