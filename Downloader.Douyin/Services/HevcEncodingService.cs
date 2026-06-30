@@ -2,7 +2,7 @@ using System.Diagnostics;
 using System.Text;
 using System.Text.RegularExpressions;
 
-namespace Douyin.StreamDownloader.Services;
+namespace Downloader.Douyin.Services;
 
 public class HevcEncodingService
 {

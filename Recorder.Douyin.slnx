@@ -2,6 +2,6 @@
   <Project Path="Recorder.Shared/Recorder.Shared.csproj" />
   <Project Path="Danmaku.Douyin/Danmaku.Douyin.csproj" />
   <Project Path="API.Douyin/API.Douyin.csproj" />
-  <Project Path="Downloader.Douyin/Douyin.StreamDownloader/Douyin.StreamDownloader.csproj" />
+  <Project Path="Downloader.Douyin/Downloader.Douyin.csproj" />
   <Project Path="Recorder.Core/Recorder.Core.csproj" />
 </Solution>

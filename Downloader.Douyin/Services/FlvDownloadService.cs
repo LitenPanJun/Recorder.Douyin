@@ -1,9 +1,9 @@
 using System.Diagnostics;
 using System.Net;
-using Douyin.StreamDownloader.Models;
+using Downloader.Douyin.Models;
 using Recorder.Shared;
 
-namespace Douyin.StreamDownloader.Services;
+namespace Downloader.Douyin.Services;
 
 public class FlvDownloadService
 {

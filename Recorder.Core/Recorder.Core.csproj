@@ -11,7 +11,7 @@
     <ProjectReference Include="..\Recorder.Shared\Recorder.Shared.csproj" />
     <ProjectReference Include="..\Danmaku.Douyin\Danmaku.Douyin.csproj" />
     <ProjectReference Include="..\API.Douyin\API.Douyin.csproj" />
-    <ProjectReference Include="..\Downloader.Douyin\Douyin.StreamDownloader\Douyin.StreamDownloader.csproj" />
+    <ProjectReference Include="..\Downloader.Douyin\Downloader.Douyin.csproj" />
   </ItemGroup>
 
 </Project>
