@@ -1,6 +1,6 @@
 # Recorder.Douyin — 抖音录播姬
 
-基于 C# 实现的抖音直播录制工具，集成弹幕接收与推流下载功能。
+基于 C# 实现的抖音直播录制工具，支持推流下载与弹幕接收同步录制。
 
 ## 项目结构
 
@@ -92,17 +92,34 @@ var result = await downloader.DownloadAsync(
     progress: new Progress<DownloadProgress>(p => Console.WriteLine(p)));
 ```
 
-## 弹幕接收
+## 弹幕与推流同步录制
+
+弹幕接收与推流下载可同时进行，实现完整的直播录制（视频流 + 弹幕消息）：
 
 ```csharp
+using API.Douyin;
 using DouyinDanmaku.Models;
 using DouyinDanmaku.Services;
+using Downloader.Douyin;
 
-var client = new DouyinDanmakuClient();
-client.OnMessage += msg => Console.WriteLine($"[{msg.Type}] {msg.UserName}: {msg.Content}");
+// 1. 获取直播间信息和画质
+var liveClient = new DouyinLiveClient();
+var detail = await liveClient.GetRoomDetailAsync("webRid");
+var qualities = await liveClient.GetPlayQualitiesAsync(detail);
+var best = qualities.First();
 
-var args = new DouyinDanmakuArgs("webRid", "roomId", "userId", "cookie");
-await client.StartAsync(args);
+// 2. 启动弹幕接收
+var danmaku = new DouyinDanmakuClient();
+danmaku.OnMessage += msg => SaveDanmaku(msg); // 保存弹幕到文件
+await danmaku.StartAsync(detail.DanmakuData!);
+
+// 3. 同步启动推流下载
+var downloader = new StreamDownloader();
+var result = await downloader.DownloadAsync(
+    url: best.Urls.First(),
+    outputPath: $"./recordings/{detail.RoomId}",
+    segmentDuration: TimeSpan.FromMinutes(10),
+    progress: new Progress<DownloadProgress>(p => Console.WriteLine(p)));
 ```
 
 ## 开发指南
