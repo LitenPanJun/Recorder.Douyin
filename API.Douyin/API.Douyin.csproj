@@ -1,17 +1,14 @@
 <Project Sdk="Microsoft.NET.Sdk">
-
   <PropertyGroup>
-    <OutputType>Exe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <RootNamespace>API.Douyin</RootNamespace>
   </PropertyGroup>
-
+  <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+  </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Recorder.Shared\Recorder.Shared.csproj" />
-    <ProjectReference Include="..\Danmaku.Douyin\Danmaku.Douyin.csproj" />
-    <ProjectReference Include="..\API.Douyin\API.Douyin.csproj" />
-    <ProjectReference Include="..\Downloader.Douyin\Downloader.Douyin.csproj" />
   </ItemGroup>
-
 </Project>

@@ -3,9 +3,6 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <RootNamespace>Downloader.Douyin</RootNamespace>
+    <RootNamespace>Recorder.Shared</RootNamespace>
   </PropertyGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\Recorder.Shared\Recorder.Shared.csproj" />
-  </ItemGroup>
 </Project>

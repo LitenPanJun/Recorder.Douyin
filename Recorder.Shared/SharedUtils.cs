@@ -1,4 +1,6 @@
-namespace DouyinDanmaku.Utils;
+using System.Security.Cryptography;
+
+namespace Recorder.Shared;
 
 public static class SharedUtils
 {
@@ -13,7 +15,11 @@ public static class SharedUtils
 
     public static string GenerateMsToken(int length = 128)
     {
-        const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-        return new string(Enumerable.Range(0, length).Select(_ => chars[Random.Shared.Next(chars.Length)]).ToArray());
+        const string chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+        var data = RandomNumberGenerator.GetBytes(length);
+        var result = new char[length];
+        for (var i = 0; i < length; i++)
+            result[i] = chars[data[i] % chars.Length];
+        return new string(result);
     }
 }

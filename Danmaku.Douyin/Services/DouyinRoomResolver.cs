@@ -1,7 +1,6 @@
-using System.Net;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using DouyinDanmaku.Utils;
+using Recorder.Shared;
 
 namespace DouyinDanmaku.Services;
 
@@ -53,15 +52,14 @@ public class DouyinRoomResolver
 
     private static async Task<string> FetchCookieAsync()
     {
-        using var client = MakeClient();
         try
         {
-            var resp = await client.GetAsync("https://live.douyin.com/");
-            foreach (var c in resp.Headers.GetValues("Set-Cookie").DefaultIfEmpty())
-            {
-                var m = Regex.Match(c ?? "", @"ttwid=[^;]+", RegexOptions.IgnoreCase);
-                if (m.Success) return m.Value;
-            }
+            var resp = await HttpUtils.HeadAsync("https://live.douyin.com/");
+            var ttwid = resp
+                .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .FirstOrDefault(c => c.StartsWith("ttwid", StringComparison.OrdinalIgnoreCase));
+            if (ttwid != null)
+                return ttwid;
         }
         catch { }
         return "";
@@ -105,27 +103,23 @@ public class DouyinRoomResolver
             return null;
         }
 
-        var signedQuery = $"{queryString}&a_bogus={Uri.EscapeDataString(aBogus)}";
-        var url = $"https://live.douyin.com/webcast/room/web/enter/?{signedQuery}";
+        var signedUrl = $"https://live.douyin.com/webcast/room/web/enter/?{queryString}&a_bogus={Uri.EscapeDataString(aBogus)}";
 
-        using var client = MakeClient();
-        var request = new HttpRequestMessage(HttpMethod.Get, url);
-        request.Headers.TryAddWithoutValidation("Cookie", cookie);
-        request.Headers.TryAddWithoutValidation("Referer", "https://live.douyin.com/");
+        var headers = new Dictionary<string, string>
+        {
+            ["Cookie"] = cookie,
+            ["Referer"] = "https://live.douyin.com/"
+        };
 
-        HttpResponseMessage resp;
+        string body;
         try
         {
-            resp = await client.SendAsync(request);
+            body = await HttpUtils.GetStringAsync(signedUrl, headers);
         }
         catch
         {
             return null;
         }
-
-        var body = await resp.Content.ReadAsStringAsync();
-        if (!resp.IsSuccessStatusCode)
-            return null;
 
         using var doc = JsonDocument.Parse(body);
         var root = doc.RootElement;
@@ -174,12 +168,11 @@ public class DouyinRoomResolver
 
     private static async Task<DouyinRoomInfo?> ResolveByHtmlAsync(string webRid, string cookie)
     {
-        using var client = MakeClient();
-        var request = new HttpRequestMessage(HttpMethod.Get, $"https://live.douyin.com/{webRid}");
-        request.Headers.TryAddWithoutValidation("Cookie", cookie);
-
-        var resp = await client.SendAsync(request);
-        var html = await resp.Content.ReadAsStringAsync();
+        var headers = new Dictionary<string, string>
+        {
+            ["Cookie"] = cookie
+        };
+        var html = await HttpUtils.GetStringAsync($"https://live.douyin.com/{webRid}", headers);
 
         var roomId = ExtractRoomId(html);
         if (string.IsNullOrEmpty(roomId))
@@ -201,17 +194,7 @@ public class DouyinRoomResolver
         };
     }
 
-    private static HttpClient MakeClient()
-    {
-        var h = new HttpClientHandler
-        {
-            AllowAutoRedirect = true,
-            AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate,
-        };
-        var c = new HttpClient(h) { Timeout = TimeSpan.FromSeconds(20) };
-        c.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", UserAgent);
-        return c;
-    }
+
 
     private static string GetString(JsonElement el, string prop) =>
         el.TryGetProperty(prop, out var v) ? v.GetString() ?? "" : "";
