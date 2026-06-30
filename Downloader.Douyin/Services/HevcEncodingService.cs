@@ -50,6 +50,7 @@ public class HevcEncodingService
                    $"-preset medium " +
                    $"-tag:v hvc1 " +
                    $"-c:a copy " +
+                   $"-f matroska " +
                    $"-y \"{tempFile}\"";
 
         Console.Error.WriteLine($"[ffmpeg] Encoding: {Path.GetFileName(inputFile)} -> {Path.GetFileName(outputFile)}");
