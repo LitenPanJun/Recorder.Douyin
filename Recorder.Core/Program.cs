@@ -31,10 +31,15 @@ if (enableHevc)
     crf = Math.Clamp(crf, 0, 51);
 }
 
-Console.Write("请输入分段时长(分钟, 默认 10): ");
+Console.Write("请输入分段时长(分钟, 0 为不分段, 默认 10): ");
 var segInput = Console.ReadLine()?.Trim();
-var segmentDuration = TimeSpan.FromMinutes(
-    !string.IsNullOrEmpty(segInput) && int.TryParse(segInput, out var segMin) ? segMin : 10);
+TimeSpan segmentDuration;
+if (string.IsNullOrEmpty(segInput) || !int.TryParse(segInput, out var segMin))
+    segmentDuration = TimeSpan.FromMinutes(10);
+else if (segMin <= 0)
+    segmentDuration = TimeSpan.FromHours(24);
+else
+    segmentDuration = TimeSpan.FromMinutes(segMin);
 
 Console.Write("请输入保存目录 (默认 ./recordings): ");
 var baseDir = Console.ReadLine()?.Trim();
@@ -106,7 +111,7 @@ Console.WriteLine();
 #region 文件命名
 
 var now = DateTime.Now;
-var datePart = $"直播{now:yyyy-MM-dd}_{now:HH-mm-ss}";
+var datePart = $"{now:yyyy-MM-dd}_{now:HH-mm-ss}";
 var safeTitle = SanitizeFileName(detail.Title);
 var safeUserName = SanitizeFileName(detail.UserName);
 var baseName = $"{datePart}_{safeTitle}";
