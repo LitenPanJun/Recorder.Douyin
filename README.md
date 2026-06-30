@@ -2,8 +2,6 @@
 
 基于 C# 实现的抖音直播录制工具，支持推流下载与弹幕接收同步录制。
 
-> 弹幕接收与视频流接收参考了 [AllLive](https://github.com/xiaoyaocz/AllLive) 并基于其进行二次开发。
-
 ## 项目结构
 
 ```
@@ -160,6 +158,10 @@ dotnet build
 ```
 
 提交前确保 0 错误、0 警告。
+
+## 项目鸣谢
+
+- [AllLive](https://github.com/xiaoyaocz/AllLive)（MIT 协议）— 弹幕接收与视频流接收参考了本项目并基于其进行二次开发
 
 ## 许可协议
 
