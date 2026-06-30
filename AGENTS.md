@@ -21,16 +21,15 @@
 
 ### 1. 单步骤执行 Git 提交
 
-所有 Git 提交必须使用单步骤命令完成，不得分步执行：
+每一次操作步骤（无论多微小）都应独立提交，做到事无巨细：
 
 ```bash
-# ✅ 正确示例（单步骤）
+# ✅ 正确示例（每个步骤独立提交）
 git add -A && git commit -m "feat(core): 添加直播间监控功能" && git push
+git add -A && git commit -m "fix(danmaku): 修正弹幕解析超时阈值" && git push
+git add -A && git commit -m "refactor(stream): 提取重复的 HTTP 工具方法" && git push
 
-# ❌ 禁止分步操作
-# git add .
-# git commit -m "xxx"
-# git push
+# ❌ 禁止积攒多个改动后一次性提交
 ```
 
 ### 2. 使用严格的分支制度开发
