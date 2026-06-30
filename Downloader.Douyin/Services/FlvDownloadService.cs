@@ -63,8 +63,6 @@ public class FlvDownloadService
         string? currentSegmentPath = null;
 
         byte[]? segmentPrefix = null;
-        byte[]? overflow = null;
-        var rotationPending = false;
         var seg1Raw = new List<byte>(65536);
 
         try
@@ -93,10 +91,28 @@ public class FlvDownloadService
                         await currentSegment.WriteAsync(
                             segmentPrefix, 0, segmentPrefix.Length, token);
 
-                        if (overflow != null)
+                        var initBuf = new byte[81920];
+                        var initRead = await responseStream.ReadAsync(
+                            initBuf.AsMemory(0, initBuf.Length), token);
+                        if (initRead > 0)
                         {
-                            await currentSegment.WriteAsync(overflow, 0, overflow.Length, token);
-                            overflow = null;
+                            int firstTagStart = -1;
+                            var p = 0;
+                            while (p + 11 <= initRead)
+                            {
+                                var t = initBuf[p];
+                                if (t != 8 && t != 9 && t != 18) { p++; continue; }
+                                if (initBuf[p + 8] != 0 || initBuf[p + 9] != 0 || initBuf[p + 10] != 0)
+                                { p++; continue; }
+                                var ds = (initBuf[p + 1] << 16) |
+                                         (initBuf[p + 2] << 8) | initBuf[p + 3];
+                                if (p + 11 + ds > initRead) break;
+                                firstTagStart = p;
+                                break;
+                            }
+                            var writeFrom = firstTagStart >= 0 ? firstTagStart : 0;
+                            await currentSegment.WriteAsync(
+                                initBuf, writeFrom, initRead - writeFrom, token);
                         }
                     }
                 }
@@ -105,6 +121,7 @@ public class FlvDownloadService
                     buffer, 0, buffer.Length, token);
                 if (bytesRead == 0) break;
 
+                await currentSegment.WriteAsync(buffer, 0, bytesRead, token);
                 totalDownloaded += bytesRead;
 
                 if (segmentIndex == 1 && segmentPrefix == null)
@@ -114,60 +131,7 @@ public class FlvDownloadService
                         segmentPrefix = prefix;
                 }
 
-                if (rotationPending)
-                {
-                    var splitPos = FindKeyframeBoundary(buffer, bytesRead);
-                    if (splitPos > 0)
-                    {
-                        await currentSegment.WriteAsync(buffer, 0, splitPos, token);
-
-                        overflow = new byte[bytesRead - splitPos];
-                        Array.Copy(buffer, splitPos, overflow, 0, overflow.Length);
-
-                        await currentSegment.FlushAsync(token);
-                        await currentSegment.DisposeAsync();
-                        var completedPath = currentSegmentPath!;
-                        var completedIndex = segmentIndex;
-
-                        if (onSegmentCompleted != null)
-                        {
-                            try
-                            {
-                                await onSegmentCompleted(
-                                    completedIndex, completedPath,
-                                    new FileInfo(completedPath).Length, token);
-                            }
-                            catch { }
-                        }
-
-                        progressState.CurrentSegment = $"[{completedIndex}] 下载完成";
-                        progress?.Report(progressState);
-
-                        currentSegment = null;
-                        currentSegmentPath = null;
-                        rotationPending = false;
-                    }
-                    else
-                    {
-                        await currentSegment.WriteAsync(buffer, 0, bytesRead, token);
-                    }
-                }
-                else
-                {
-                    await currentSegment.WriteAsync(buffer, 0, bytesRead, token);
-
-                    var segmentElapsed = stopwatch.Elapsed - segmentStartTime;
-                    if (segmentElapsed >= segDuration)
-                    {
-                        var minSegBytes = segmentPrefix != null
-                            ? segmentPrefix.Length + 4096 : 4096;
-                        if (currentSegment!.Length < minSegBytes)
-                            continue;
-
-                        rotationPending = true;
-                    }
-                }
-
+                var segmentElapsed = stopwatch.Elapsed - segmentStartTime;
                 progressState.BytesDownloaded = totalDownloaded;
                 progressState.Elapsed = stopwatch.Elapsed;
                 progressState.CurrentSegment = $"[{segmentIndex}] 下载中...";
@@ -179,6 +143,38 @@ public class FlvDownloadService
                     progressState.SpeedBytesPerSecond = Math.Max(0, speed);
                     lastBytes = totalDownloaded;
                     progress.Report(progressState);
+                }
+
+                if (segmentElapsed >= segDuration)
+                {
+                    var minSegBytes = segmentPrefix != null
+                        ? segmentPrefix.Length + 4096 : 4096;
+                    if (segmentIndex > 0 && currentSegment!.Length < minSegBytes)
+                        continue;
+
+                    await currentSegment.FlushAsync(token);
+                    await currentSegment.DisposeAsync();
+                    var completedPath = currentSegmentPath!;
+                    var completedIndex = segmentIndex;
+                    var fileSize = new FileInfo(completedPath).Length;
+
+                    if (onSegmentCompleted != null)
+                    {
+                        try
+                        {
+                            await onSegmentCompleted(
+                                completedIndex, completedPath, fileSize, token);
+                        }
+                        catch
+                        {
+                        }
+                    }
+
+                    progressState.CurrentSegment = $"[{completedIndex}] 下载完成";
+                    progress?.Report(progressState);
+
+                    currentSegment = null;
+                    currentSegmentPath = null;
                 }
             }
         }
@@ -348,27 +344,4 @@ public class FlvDownloadService
         return result;
     }
 
-    /// <summary>在 buffer 中查找 FLV 视频关键帧，返回关键帧后（含 PreviousTagSize）的字节偏移。
-    /// 未找到时返回 0。</summary>
-    private static int FindKeyframeBoundary(byte[] buffer, int length)
-    {
-        var pos = 0;
-        while (pos + 11 <= length)
-        {
-            var tagType = buffer[pos];
-            if (tagType != 8 && tagType != 9 && tagType != 18) { pos++; continue; }
-            if (buffer[pos + 8] != 0 || buffer[pos + 9] != 0 || buffer[pos + 10] != 0)
-            { pos++; continue; }
-
-            var dataSize = (buffer[pos + 1] << 16) | (buffer[pos + 2] << 8) | buffer[pos + 3];
-            var tagEnd = pos + 11 + dataSize + 4;
-            if (tagEnd > length) break;
-
-            if (tagType == 9 && (buffer[pos + 11] >> 4) == 1)
-                return tagEnd;
-
-            pos = tagEnd;
-        }
-        return 0;
-    }
 }

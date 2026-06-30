@@ -26,11 +26,11 @@ public static class SegmentMerger
 
         var ext = Path.GetExtension(segmentFiles[0]).ToLowerInvariant();
 
-        if (FfmpegPath != null)
-            return await MergeWithFfmpegAsync(segmentFiles, outputPath, ext, progress, ct);
-
         if (ext == ".flv")
             return MergeFlvBinary(segmentFiles, outputPath);
+
+        if (FfmpegPath != null)
+            return await MergeWithFfmpegAsync(segmentFiles, outputPath, ext, progress, ct);
 
         throw new InvalidOperationException(
             $"ffmpeg is required to merge {ext} files. Please install ffmpeg and ensure it's in PATH.");
