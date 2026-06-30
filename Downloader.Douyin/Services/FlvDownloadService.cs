@@ -187,14 +187,13 @@ public class FlvDownloadService
                 var finalPath = currentSegmentPath!;
                 var fileSize = new FileInfo(finalPath).Length;
 
-                var minBytes = segmentPrefix != null
-                    ? segmentPrefix.Length + 4096 : 4096;
-                if (fileSize < minBytes)
+                if (segmentIndex > 1 && segmentPrefix != null
+                    && fileSize < segmentPrefix.Length + 4096)
                 {
                     try { File.Delete(finalPath); } catch { }
                     segmentFiles.Remove(finalPath);
                     Console.Error.WriteLine(
-                        $"[FlvDownload] 分段 {segmentIndex} 数据不完整 ({fileSize}B)，已删除");
+                        $"[FlvDownload] 分段 {segmentIndex} 数据过小 ({fileSize}B)，已删除");
                 }
                 else if (fileSize > 0 && onSegmentCompleted != null)
                 {
