@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="Danmaku.Douyin/Danmaku.Douyin.csproj" />
+  <Project Path="Downloader.Douyin/Downloader.Douyin.csproj" />
+  <Project Path="Recorder.Core/Recorder.Core.csproj" />
+</Solution>

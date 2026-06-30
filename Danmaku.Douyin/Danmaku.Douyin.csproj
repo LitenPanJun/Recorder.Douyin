@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>DouyinDanmaku</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Google.Protobuf" Version="3.35.1" />
+    <PackageReference Include="Jint" Version="4.10.1" />
+    <PackageReference Include="protobuf-net" Version="3.2.56" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Services\abogus.js" LogicalName="DouyinDanmaku.Services.abogus.js" />
+    <EmbeddedResource Include="Services\mssdk.js" LogicalName="DouyinDanmaku.Services.mssdk.js" />
+  </ItemGroup>
+
+</Project>
