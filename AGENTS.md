@@ -13,7 +13,7 @@
 | Douyin.StreamDownloader | `Downloader.Douyin/Douyin.StreamDownloader/` | FLV 推流下载 + HEVC 编码管道 |
 
 类库保持独立项目、独立编译，通过 ProjectReference 引用，编译时复制输出并携带依赖。
-类库项目**不加入解决方案**（`Recorder.Douyin.slnx`），各自独立开发、完善和二次编译。
+类库项目**统一加入解决方案**（`Recorder.Douyin.slnx`），但文件夹和源码编辑保持独立，各自独立开发和二次编译。
 
 ---
 
