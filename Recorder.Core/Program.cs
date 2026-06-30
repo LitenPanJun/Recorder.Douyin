@@ -31,15 +31,10 @@ if (enableHevc)
     crf = Math.Clamp(crf, 0, 51);
 }
 
-Console.Write("请输入分段时长(分钟, 0 为不分段, 默认 10): ");
+Console.Write("请输入分段时长(分钟, 默认 10): ");
 var segInput = Console.ReadLine()?.Trim();
-TimeSpan segmentDuration;
-if (string.IsNullOrEmpty(segInput) || !int.TryParse(segInput, out var segMin))
-    segmentDuration = TimeSpan.FromMinutes(10);
-else if (segMin <= 0)
-    segmentDuration = TimeSpan.FromHours(24);
-else
-    segmentDuration = TimeSpan.FromMinutes(segMin);
+var segmentDuration = TimeSpan.FromMinutes(
+    !string.IsNullOrEmpty(segInput) && int.TryParse(segInput, out var segMin) ? Math.Max(segMin, 1) : 10);
 
 Console.Write("请输入保存目录 (默认 ./recordings): ");
 var baseDir = Console.ReadLine()?.Trim();
@@ -131,12 +126,13 @@ var cancelCts = new CancellationTokenSource();
 
 // 弹幕接收
 var danmakuClient = new DouyinDanmakuClient();
-var danmakuPath = $"{outputBasePath}_弹幕.txt";
+var danmakuPath = $"{outputBasePath}_Danmaku.txt";
 
 danmakuClient.OnMessage += msg =>
 {
     Interlocked.Increment(ref danmakuCount);
-    var line = $"[{msg.Type}] {msg.UserName}: {msg.Content}";
+    var ts = DateTime.Now.ToString("HH:mm:ss");
+    var line = $"[{ts}] [{msg.Type}] {msg.UserName}: {msg.Content}";
     try
     {
         File.AppendAllText(danmakuPath, line + "\n");
@@ -148,7 +144,7 @@ danmakuClient.OnReady += () =>
 {
     try
     {
-        File.AppendAllText(danmakuPath, $"[系统] 弹幕连接已建立 ({now:yyyy-MM-dd HH:mm:ss})\n");
+        File.AppendAllText(danmakuPath, $"[{DateTime.Now:HH:mm:ss}] [系统] 弹幕连接已建立\n");
     }
     catch { }
 };
