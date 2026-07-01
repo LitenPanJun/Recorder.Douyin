@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Text;
 
 namespace Downloader.Douyin.Services;
 
@@ -49,12 +48,18 @@ public static class SegmentMerger
 
         try
         {
-            // Windows 兼容：双引号 + \r\n 换行
-            var lines = segmentFiles.Select(f => $"file \"{f}\"");
-            await File.WriteAllTextAsync(
-                concatFile, string.Join(Environment.NewLine, lines), Encoding.UTF8, ct);
+            // 匹配 .lib/Merge-LiveRecordings-Univ.ps1 的 concat 文件格式：
+            //   file '/path/to/file'
+            //   单引号 + '' 转义，UTF-8 NO BOM
+            var lines = segmentFiles.Select(f => $"file '{f.Replace("'", "''")}'");
+            var utf8NoBom = new System.Text.UTF8Encoding(false);
+            await using (var sw = new StreamWriter(concatFile, false, utf8NoBom))
+            {
+                foreach (var line in lines)
+                    await sw.WriteLineAsync(line);
+            }
 
-            var args = $"-f concat -safe 0 -i \"{concatFile}\" -c copy -map_metadata -1 -y \"{outputPath}\"";
+            var args = $"-f concat -safe 0 -i \"{concatFile}\" -c:v copy -c:a copy -y \"{outputPath}\"";
 
             var (exitCode, _) = await RunFfmpegAsync(args, progress, ct);
 
@@ -64,7 +69,6 @@ public static class SegmentMerger
                 return outputPath;
             }
 
-            // concat 失败：对于 MKV 尝试音频重编码 concat 回退
             if (ext == ".flv")
             {
                 Console.Error.WriteLine(
@@ -75,8 +79,8 @@ public static class SegmentMerger
             if (ext == ".mkv")
             {
                 Console.Error.WriteLine(
-                    "[合并警告] ffmpeg concat 失败，尝试音频重编码回退...");
-                return await MergeMkvWithAudioReencodeAsync(
+                    "[合并警告] ffmpeg concat 失败，尝试 concat filter 回退...");
+                return await MergeMkvConcatFilterAsync(
                     segmentFiles, outputPath, ct);
             }
 
@@ -149,16 +153,16 @@ public static class SegmentMerger
         return (process.ExitCode, stderr.ToString());
     }
 
-    /// <summary>MKV concat 回退：用 concat filter + 音频重编码确保兼容。</summary>
-    private static async Task<string> MergeMkvWithAudioReencodeAsync(
+    /// <summary>MKV concat 回退：用 concat filter 重编码，确保流兼容。</summary>
+    private static async Task<string> MergeMkvConcatFilterAsync(
         List<string> segmentFiles, string outputPath, CancellationToken ct)
     {
         var inputArgs = string.Join(" ",
             segmentFiles.Select(f => $"-i \"{f}\""));
         var n = segmentFiles.Count;
-        var streamMaps = string.Join(" ",
+        var streamMaps = string.Concat(
             Enumerable.Range(0, n).SelectMany(i => new[] { $"[{i}:v:0]", $"[{i}:a:0]" }));
-        var filter = $"concat=n={n}:v=1:a=1";
+        var filter = $"{streamMaps}concat=n={n}:v=1:a=1[outv][outa]";
 
         var args = $"{inputArgs} " +
                    $"-filter_complex \"{filter}\" " +
@@ -172,7 +176,7 @@ public static class SegmentMerger
         if (exitCode != 0)
         {
             Console.Error.WriteLine(
-                $"[合并警告] MKV 回退也失败 (exit {exitCode})");
+                $"[合并警告] MKV filter 回退也失败 (exit {exitCode})");
             var msg = stderr.Length > 300 ? stderr[..300] + "..." : stderr;
             throw new Exception(
                 $"MKV merge fallback failed (exit {exitCode}): {msg}");
