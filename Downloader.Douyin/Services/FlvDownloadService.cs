@@ -201,6 +201,11 @@ public class FlvDownloadService
 
                 if (segmentElapsed >= segDuration)
                 {
+                    // 段1未找到代码头（AVC/HEVC sequence header + AAC header）时暂不分段，
+                    // 确保分段2+可独立解码。最长等待3倍 segDuration 后强制分。
+                    if (segmentIndex == 1 && segmentPrefix == null && segmentElapsed < segDuration * 3)
+                        continue;
+
                     var minSegBytes = segmentPrefix != null
                         ? segmentPrefix.Length + 4096 : 4096;
                     if (segmentIndex > 0 && currentSegment!.Length < minSegBytes)
@@ -295,11 +300,11 @@ public class FlvDownloadService
 
         var pos = 13;
         byte[]? avcHeader = null;
+        byte[]? hevcHeader = null;
         byte[]? aacHeader = null;
 
         while (pos + 11 <= raw.Count)
         {
-            var tagStart = pos;
             var tagType = raw[pos];
             var dataSize = (raw[pos + 1] << 16) | (raw[pos + 2] << 8) | raw[pos + 3];
             var tagLen = 11 + dataSize;
@@ -317,6 +322,12 @@ public class FlvDownloadService
                         var avcPacketType = tagData[12];
                         if (avcPacketType == 0)
                             avcHeader ??= tagData;
+                    }
+                    else if (codecId == 12)
+                    {
+                        var hevcPacketType = tagData[12];
+                        if (hevcPacketType == 0)
+                            hevcHeader ??= tagData;
                     }
                 }
             }
@@ -337,9 +348,9 @@ public class FlvDownloadService
             pos += tagLen + 4;
         }
 
-        // 即使缺失预期的代码头，仍然返回有效 FLV 头作为前缀，
-        // 确保分段 2+ 至少能被 ffmpeg 识别为 FLV 格式。
-        // 实际编码配置数据会在后续首个关键帧/音频帧中出现。
+        if ((hasVideo && avcHeader == null && hevcHeader == null) ||
+            (hasAudio && aacHeader == null))
+            return false;
 
         using var ms = new MemoryStream();
         ms.Write(raw.GetRange(0, 9).ToArray());
@@ -349,6 +360,12 @@ public class FlvDownloadService
         {
             ms.Write(avcHeader, 0, avcHeader.Length);
             WriteU32BE(ms, avcHeader.Length);
+        }
+
+        if (hevcHeader != null)
+        {
+            ms.Write(hevcHeader, 0, hevcHeader.Length);
+            WriteU32BE(ms, hevcHeader.Length);
         }
 
         if (aacHeader != null)

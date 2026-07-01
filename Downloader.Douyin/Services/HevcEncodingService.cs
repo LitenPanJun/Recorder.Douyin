@@ -130,8 +130,18 @@ public class HevcEncodingService
         if (process.ExitCode != 0)
         {
             var stderr = stderrBuilder.ToString();
-            Console.Error.WriteLine($"[ffmpeg] Failed (exit code {process.ExitCode}):");
-            Console.Error.WriteLine(stderr.Length > 500 ? stderr[..500] + "..." : stderr);
+            var lines = stderr.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+            var relevant = lines.Where(l =>
+                l.Contains("Error", StringComparison.OrdinalIgnoreCase) ||
+                l.Contains("Invalid", StringComparison.OrdinalIgnoreCase) ||
+                l.Contains("Cannot determine", StringComparison.OrdinalIgnoreCase) ||
+                l.Contains("Packet mismatch", StringComparison.OrdinalIgnoreCase) ||
+                l.Contains("No start code", StringComparison.OrdinalIgnoreCase) ||
+                l.Contains("Conversion failed", StringComparison.OrdinalIgnoreCase));
+            var msg = string.Join(" | ", relevant);
+            if (string.IsNullOrEmpty(msg))
+                msg = stderr.Length > 200 ? stderr[..200] + "..." : stderr;
+            Console.Error.WriteLine($"[ffmpeg] Failed (exit {process.ExitCode}): {msg}");
             throw new Exception(
                 $"ffmpeg encode failed (exit {process.ExitCode})\n{stderr}");
         }
