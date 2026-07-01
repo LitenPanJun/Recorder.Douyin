@@ -112,9 +112,7 @@ var statusTimer = new Timer(_ =>
 void StartStreamer(StreamerConfig sc)
 {
     if (activeTasks.ContainsKey(sc.Id))
-    {
-        StopStreamer(sc.Id);
-    }
+        return;
 
     var recorder = new StreamerRecorder(sc, config.Defaults, liveClient);
     recorder.StatusChanged += status =>

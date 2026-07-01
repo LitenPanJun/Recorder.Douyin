@@ -17,6 +17,7 @@ public class StreamerRecorder
     private readonly DouyinLiveClient _liveClient;
     private readonly StreamDownloader _downloader;
     private readonly CancellationTokenSource _cts;
+    private volatile bool _stopRequested;
 
     private string BaseDir => _config.OutputDir ?? _defaults.OutputDir;
     private string QualityName => _config.Quality ?? _defaults.Quality;
@@ -53,13 +54,14 @@ public class StreamerRecorder
 
     public void Stop()
     {
+        _stopRequested = true;
         _downloader.Cancel();
-        _cts.Cancel();
+        // 不取消 _cts.Token — 让已入队的编码和合并任务继续完成
     }
 
     public async Task RunAsync()
     {
-        while (!_cts.Token.IsCancellationRequested)
+        while (!_cts.Token.IsCancellationRequested && !_stopRequested)
         {
             LiveRoomDetail? detail = null;
             SetStatus("解析中");
