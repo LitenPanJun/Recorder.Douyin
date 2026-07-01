@@ -54,8 +54,8 @@ jobs:
 
   build:
     needs: changes
-    # main 始终构建；develop 仅在有源码变更且提交唯一时才构建
-    if: needs.changes.outputs.unique == 'true' && (github.ref == 'refs/heads/main' || needs.changes.outputs.src == 'true')
+    # 两条分支均要求源码变更才构建；develop 额外要求提交在 main 上唯一
+    if: needs.changes.outputs.src == 'true' && needs.changes.outputs.unique == 'true'
     runs-on: ubuntu-latest
     outputs:
       package-names: ${{ steps.list.outputs.names }}
