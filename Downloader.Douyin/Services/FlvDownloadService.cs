@@ -81,7 +81,7 @@ public class FlvDownloadService
                     currentSegmentPath = Path.Combine(dir,
                         $"{baseName}_seg{segmentIndex:D3}.flv");
                     currentSegment = new FileStream(
-                        currentSegmentPath, FileMode.Create, FileAccess.Write,
+                        currentSegmentPath, FileMode.Create, FileAccess.ReadWrite,
                         FileShare.Read, 81920, true);
                     segmentStartTime = stopwatch.Elapsed;
                     segmentFiles.Add(currentSegmentPath);
@@ -236,6 +236,21 @@ public class FlvDownloadService
                         continue;
 
                     await currentSegment.FlushAsync(CancellationToken.None);
+
+                    // 截断至末个完整 FLV tag 边界，确保大帧跨段时前段尾部不损坏
+                    if (currentSegment!.Length > 13)
+                    {
+                        var fileLen = currentSegment.Length;
+                        var scanBytes = (int)Math.Min(fileLen, 262144);
+                        var scanBuf = new byte[scanBytes];
+                        currentSegment.Seek(-scanBytes, SeekOrigin.End);
+                        _ = await currentSegment.ReadAsync(
+                            scanBuf, 0, scanBytes, CancellationToken.None);
+                        var boundary = FindLastTagBoundary(scanBuf, 0, scanBytes);
+                        if (boundary >= 13 && boundary < scanBytes)
+                            currentSegment.SetLength(fileLen - (scanBytes - boundary));
+                    }
+
                     await currentSegment.DisposeAsync();
                     var completedPath = currentSegmentPath!;
                     var completedIndex = segmentIndex;
@@ -268,6 +283,20 @@ public class FlvDownloadService
             if (currentSegment != null)
             {
                 await currentSegment.FlushAsync(CancellationToken.None);
+
+                if (currentSegment.Length > 13)
+                {
+                    var fileLen = currentSegment.Length;
+                    var scanBytes = (int)Math.Min(fileLen, 262144);
+                    var scanBuf = new byte[scanBytes];
+                    currentSegment.Seek(-scanBytes, SeekOrigin.End);
+                    _ = await currentSegment.ReadAsync(
+                        scanBuf, 0, scanBytes, CancellationToken.None);
+                    var boundary = FindLastTagBoundary(scanBuf, 0, scanBytes);
+                    if (boundary >= 13 && boundary < scanBytes)
+                        currentSegment.SetLength(fileLen - (scanBytes - boundary));
+                }
+
                 await currentSegment.DisposeAsync();
                 var finalPath = currentSegmentPath!;
                 var fileSize = new FileInfo(finalPath).Length;
@@ -436,6 +465,41 @@ public class FlvDownloadService
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// 扫描字节范围，返回末个完整 FLV tag 结束位置（含 PreviousTagSize）的偏移，
+    /// 未找到返回 -1。
+    /// </summary>
+    private static int FindLastTagBoundary(byte[] buffer, int offset, int count)
+    {
+        var end = offset + count;
+        var last = -1;
+        var pos = offset;
+
+        while (pos + 15 <= end)
+        {
+            if (!IsValidTag(buffer, pos, end)) { pos++; continue; }
+
+            var ds = (buffer[pos + 1] << 16) | (buffer[pos + 2] << 8) | buffer[pos + 3];
+            var tagEnd = pos + 11 + ds;
+            var ptsEnd = tagEnd + 4;
+            if (ptsEnd > end) break;
+
+            var ps = (buffer[tagEnd] << 24) | (buffer[tagEnd + 1] << 16) |
+                     (buffer[tagEnd + 2] << 8) | buffer[tagEnd + 3];
+            if (ps == 11 + ds)
+            {
+                last = ptsEnd;
+                pos = ptsEnd;
+            }
+            else
+            {
+                pos++;
+            }
+        }
+
+        return last;
     }
 
     /// <summary>校验 buf[pos] 是否为一个合法的 FLV tag 头：tag 类型 + streamID=0 + PreviousTagSize 匹配。</summary>
