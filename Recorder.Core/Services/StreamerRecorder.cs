@@ -190,7 +190,10 @@ public class StreamerRecorder
             Interlocked.Increment(ref danmakuCount);
             var elapsed = recordingStopwatch.Elapsed;
             var tc = $"{(int)elapsed.TotalHours:D2}:{elapsed.Minutes:D2}:{elapsed.Seconds:D2}";
-            var line = $"[{tc}] [{msg.Type}] {msg.UserName}: {msg.Content}";
+            var extra = "";
+            if (msg.Type == LiveMessageType.Gift && msg.Data is GiftInfo gift)
+                extra = $" (💎{gift.DiamondCount} 🔁{gift.ComboCount}) [{gift.Describe}] giftId={gift.GiftId} to={gift.ToUserName}";
+            var line = $"[{tc}] [{msg.Type}] {msg.UserName}: {msg.Content}{extra}";
             try { File.AppendAllText(danmakuPath, line + "\n"); }
             catch { }
         };
