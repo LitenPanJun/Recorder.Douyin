@@ -10,12 +10,13 @@ Console.OutputEncoding = System.Text.Encoding.UTF8;
 
 try { Console.CursorVisible = true; } catch { }
 
-// 全局控制台锁 — 所有 Console 写入（含 set-cursor-position）经过同一锁防止交错
-var consoleLock = new object();
-var origErr = Console.Error;
+// 错误日志文件 + 全局控制台锁
+var errorLogPath = Path.Combine(AppContext.BaseDirectory, "error.log");
+var errorLog = new ErrorLogWriter(new StreamWriter(errorLogPath, append: false, Encoding.UTF8));
+var consoleLock = errorLog.Lock;
 var origOut = Console.Out;
-Console.SetError(new LockedTextWriter(origErr, consoleLock));
 Console.SetOut(new LockedTextWriter(origOut, consoleLock));
+Console.SetError(errorLog);
 
 #region CLI 参数
 
@@ -58,12 +59,13 @@ if (config.Streamers.Count == 0)
 
 var liveClient = new DouyinLiveClient();
 var activeTasks = new ConcurrentDictionary<string, StreamerRecorder>();
+var runningTasks = new ConcurrentDictionary<string, Task>();
 var cts = new CancellationTokenSource();
 var firstCancel = true;
 var statuses = new ConcurrentDictionary<string, StreamerStatus>();
 
 if (!HevcEncodingService.IsAvailable)
-    Console.Error.WriteLine($"[警告] 未找到 ffmpeg，HEVC 编码不可用 ({HevcEncodingService.NotAvailableReason})");
+    errorLog.WriteLine($"[警告] 未找到 ffmpeg，HEVC 编码不可用 ({HevcEncodingService.NotAvailableReason})");
 
 #endregion
 
@@ -74,13 +76,14 @@ Console.CancelKeyPress += (_, args) =>
     args.Cancel = true;
     if (cts.IsCancellationRequested)
     {
-        Console.Error.WriteLine("\n[强制退出]");
+        var msg = $"[{DateTime.Now:HH:mm:ss}] [强制退出]\n";
+        File.AppendAllText(errorLogPath, msg);
         Environment.Exit(1);
     }
     if (firstCancel)
     {
         firstCancel = false;
-        Console.Error.WriteLine("\n[停止] 正在停止所有录制任务...");
+        Console.Write($"\r[停止] 正在停止所有录制任务...");
     }
     cts.Cancel();
 };
@@ -122,11 +125,18 @@ void RenderStatus()
             Console.Write(line.PadRight(width) + "\n");
         }
 
+        // 错误计数提示
+        var ec = errorLog.ErrorCount;
+        var errLine = ec > 0
+            ? $"{new string(' ', 4)}⚠ {ec} 个错误，详情见 {errorLogPath}".PadRight(width)
+            : "";
+        Console.Write(errLine + "\n");
+
         // 主播减少时擦除旧行
-        for (var i = totalLines; i < prevStatusLines; i++)
+        for (var i = totalLines + 1; i < prevStatusLines; i++)
             Console.Write("".PadRight(width) + "\n");
 
-        prevStatusLines = totalLines;
+        prevStatusLines = totalLines + (errorLog.ErrorCount > 0 ? 1 : 0);
     }
     finally
     {
@@ -155,16 +165,16 @@ void StartStreamer(StreamerConfig sc)
         statuses[status.Id] = status;
     };
     activeTasks[sc.Id] = recorder;
-    _ = Task.Run(() => recorder.RunAsync(), CancellationToken.None);
+    var runTask = Task.Run(() => recorder.RunAsync(), CancellationToken.None);
+    runningTasks[sc.Id] = runTask;
 }
 
 void StopStreamer(string id)
 {
     if (activeTasks.TryRemove(id, out var recorder))
-    {
         recorder.Stop();
-    }
     statuses.TryRemove(id, out _);
+    runningTasks.TryRemove(id, out _);
 }
 
 void SyncStreamers(AppConfig cfg)
@@ -205,19 +215,33 @@ catch (OperationCanceledException) { }
 statusTimer.Dispose();
 configWatcher.Dispose();
 
-Console.WriteLine("\n正在等待录制任务结束...");
+Console.Write("\n正在等待录制任务结束...\n");
 
+// 停止所有下载并等待编码+合并完成
+var tasks = runningTasks.Values.ToArray();
 foreach (var r in activeTasks.Values)
     r.Stop();
 
-if (activeTasks.Count > 0)
+if (tasks.Length > 0)
 {
-    Console.Write("等待录制任务结束...");
-    await Task.Delay(5000);
-    Console.WriteLine("完成");
+    var waitCts = new CancellationTokenSource();
+    waitCts.CancelAfter(TimeSpan.FromMinutes(10));
+    try
+    {
+        await Task.WhenAll(tasks).WaitAsync(waitCts.Token);
+    }
+    catch (TimeoutException)
+    {
+        Console.Write("\n部分任务超时，强制退出...");
+    }
+    catch (OperationCanceledException) { }
+    Console.Write("\n所有任务已完成");
 }
 
-Console.WriteLine("再见!");
+await errorLog.FlushFileAsync();
+errorLog.DisposeFile();
+
+Console.WriteLine("\n再见!");
 
 #endregion
 
@@ -232,7 +256,7 @@ static string FormatSize(long bytes)
     return $"{bytes} B";
 }
 
-/// <summary>将所有 Console.Out/Error 写入统一经过同一锁，防止与 SetCursorPosition 交错。</summary>
+/// <summary>将所有 Console.Out 写入统一经过同一锁，防止与 SetCursorPosition 交错。</summary>
 file sealed class LockedTextWriter : TextWriter
 {
     private readonly TextWriter _inner;
@@ -263,4 +287,40 @@ file sealed class LockedTextWriter : TextWriter
     {
         lock (_lock) { _inner.Write("\n"); }
     }
+}
+
+/// <summary>将 Console.Error 写入 error.log 文件，控制台仅反映错误计数。</summary>
+file sealed class ErrorLogWriter : TextWriter
+{
+    private readonly StreamWriter _file;
+    private int _errorCount;
+
+    public override Encoding Encoding => Encoding.UTF8;
+    public object Lock { get; }
+    public int ErrorCount => _errorCount;
+
+    public ErrorLogWriter(StreamWriter file, TextWriter? origOut = null)
+    {
+        _file = file;
+        Lock = new object();
+    }
+
+    public override void Write(char value) { }
+    public override void Write(string? value) { }
+    public override void WriteLine() { }
+
+    public override void WriteLine(string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return;
+        Interlocked.Increment(ref _errorCount);
+        lock (Lock)
+        {
+            _file.Write($"[{DateTime.Now:HH:mm:ss}] ");
+            _file.WriteLine(value);
+            _file.Flush();
+        }
+    }
+
+    public async Task FlushFileAsync() => await _file.FlushAsync();
+    public void DisposeFile() => _file.Dispose();
 }
