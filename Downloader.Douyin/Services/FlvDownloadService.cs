@@ -92,23 +92,7 @@ public class FlvDownloadService
                             initBuf.AsMemory(0, initBuf.Length), token);
                         if (initRead > 0)
                         {
-                            int firstTagStart = -1;
-                            var p = 0;
-                            while (p + 11 <= initRead)
-                            {
-                                var t = initBuf[p];
-                                if (t != 8 && t != 9 && t != 18) { p++; continue; }
-                                if (initBuf[p + 8] != 0 || initBuf[p + 9] != 0 || initBuf[p + 10] != 0)
-                                { p++; continue; }
-                                var ds = (initBuf[p + 1] << 16) |
-                                         (initBuf[p + 2] << 8) | initBuf[p + 3];
-                                if (p + 11 + ds > initRead) break;
-                                firstTagStart = p;
-                                break;
-                            }
-                            var writeFrom = firstTagStart >= 0 ? firstTagStart : 0;
-                            await currentSegment.WriteAsync(
-                                initBuf, writeFrom, initRead - writeFrom, token);
+                            await currentSegment.WriteAsync(initBuf, 0, initRead, token);
                         }
                     }
                 }
@@ -374,7 +358,8 @@ public class FlvDownloadService
     }
 
     /// <summary>扫描 buffer 找到第一个完整的 onMetaData 脚本标签（type 18），
-    /// 返回该标签末尾（含 PreviousTagSize）的偏移。未找到返回 0。</summary>
+    /// 返回该标签末尾（含 PreviousTagSize）的偏移。未找到返回 0。
+    /// 通过 PreviousTagSize 校验防止误判。</summary>
     private static int SkipMetadataTag(byte[] buffer, int length)
     {
         var pos = 0;
@@ -386,11 +371,15 @@ public class FlvDownloadService
             { pos++; continue; }
 
             var dataSize = (buffer[pos + 1] << 16) | (buffer[pos + 2] << 8) | buffer[pos + 3];
-            var tagEnd = pos + 11 + dataSize + 4;
-            if (tagEnd > length) break;
+            var tagEnd = pos + 11 + dataSize;
+            if (tagEnd + 4 > length) break;
 
-            if (tagType == 18) return tagEnd;
-            pos = tagEnd;
+            var prevSize = (buffer[tagEnd] << 24) | (buffer[tagEnd + 1] << 16) |
+                           (buffer[tagEnd + 2] << 8) | buffer[tagEnd + 3];
+            if (prevSize != 11 + dataSize) { pos++; continue; }
+
+            if (tagType == 18) return tagEnd + 4;
+            pos = tagEnd + 4;
         }
         return 0;
     }
