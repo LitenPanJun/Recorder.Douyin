@@ -11,7 +11,7 @@
     Windows → .zip,  Linux → .tar.gz
 #>
 param(
-    [string]$Version = "0.1.0",
+    [string]$Version = "0.1.1",
     [string[]]$Rids = @("win-x64", "win-arm64", "linux-x64", "linux-arm64")
 )
 
