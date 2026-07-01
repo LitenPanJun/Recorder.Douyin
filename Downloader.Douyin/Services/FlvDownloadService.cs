@@ -277,6 +277,7 @@ public class FlvDownloadService
     public void Cancel()
     {
         _shutdownRequested = true;
+        _cancelCts?.Cancel();
         _http.CancelPendingRequests();
     }
 
