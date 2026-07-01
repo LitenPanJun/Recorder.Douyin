@@ -192,15 +192,18 @@ public class DouyinDanmakuClient : IDisposable
                 HandleRoomUserSeqMessage(msg.Payload);
                 break;
             case "WebcastGiftMessage":
+            case "WebcastGiftSortMessage":
                 HandleGiftMessage(msg.Payload);
                 break;
             case "WebcastMemberMessage":
                 HandleMemberMessage(msg.Payload);
                 break;
             case "WebcastLikeMessage":
+            case "WebcastChatLikeMessage":
                 HandleLikeMessage(msg.Payload);
                 break;
             case "WebcastSocialMessage":
+            case "WebcastFansclubMessage":
                 HandleSocialMessage(msg.Payload);
                 break;
             default:
@@ -210,7 +213,7 @@ public class DouyinDanmakuClient : IDisposable
                     var unknown = new LiveMessage
                     {
                         Type = LiveMessageType.Unknown,
-                        Content = $"[{msg.Method}] (未处理, {msg.Payload.Length} bytes)",
+                        Content = $"[{msg.Method}]",
                     };
                     OnMessage?.Invoke(unknown);
                 }
