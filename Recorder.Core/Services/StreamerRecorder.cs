@@ -7,6 +7,7 @@ using Downloader.Douyin.Services;
 using DouyinDanmaku.Models;
 using DouyinDanmaku.Services;
 using Recorder.Core.Models;
+using Recorder.Shared;
 
 namespace Recorder.Core.Services;
 
@@ -189,7 +190,7 @@ public class StreamerRecorder
             _ = danmakuClient.StartAsync(danmakuArgs).ContinueWith(t =>
             {
                 if (t.IsFaulted)
-                    Console.Error.WriteLine($"\n[弹幕错误] {t.Exception?.InnerException?.Message}");
+                    Log.Error($"[弹幕错误] {t.Exception?.InnerException?.Message}");
             });
         }
 
