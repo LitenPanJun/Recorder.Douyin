@@ -5,7 +5,29 @@ on:
     branches: [develop, main]
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      src: ${{ steps.filter.outputs.src }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            src:
+              - '**.cs'
+              - '**.csproj'
+              - '**.props'
+              - '**.slnx'
+              - '**.js'
+              - 'build-release.ps1'
+
   build:
+    needs: changes
+    # main 始终构建；develop 仅在有源码变更时构建
+    if: github.ref == 'refs/heads/main' || needs.changes.outputs.src == 'true'
     runs-on: ubuntu-latest
     outputs:
       package-names: ${{ steps.list.outputs.names }}
@@ -36,7 +58,8 @@ jobs:
           echo "names=$json" >> $env:GITHUB_OUTPUT
 
   upload:
-    needs: build
+    needs: [changes, build]
+    if: github.ref == 'refs/heads/main' || needs.changes.outputs.src == 'true'
     runs-on: ubuntu-latest
     strategy:
       matrix:
