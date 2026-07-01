@@ -61,16 +61,16 @@ public class FlvDownloadService
         byte[]? segmentPrefix = null;
         var seg1Raw = new List<byte>(65536);
         var metadataSkipped = false;
-        var shutdownRequested = false;
+        _shutdownRequested = false;
         var shutdownStart = TimeSpan.Zero;
 
         try
         {
             while (true)
             {
-                if (token.IsCancellationRequested && !shutdownRequested)
+                if (token.IsCancellationRequested && !_shutdownRequested)
                 {
-                    shutdownRequested = true;
+                    _shutdownRequested = true;
                     shutdownStart = stopwatch.Elapsed;
                     Console.Error.WriteLine("\n[下载] 正在等待可截断点后停止...");
                 }
@@ -130,8 +130,16 @@ public class FlvDownloadService
                     }
                 }
 
-                var bytesRead = await responseStream.ReadAsync(
-                    buffer, 0, buffer.Length, token);
+                var bytesRead = 0;
+                try
+                {
+                    bytesRead = await responseStream.ReadAsync(
+                        buffer, 0, buffer.Length, token);
+                }
+                catch when (_shutdownRequested)
+                {
+                    break;
+                }
                 if (bytesRead == 0) break;
 
                 var bytesToLog = bytesRead;
@@ -222,7 +230,7 @@ public class FlvDownloadService
                     currentSegment = null;
                     currentSegmentPath = null;
 
-                    if (shutdownRequested) break;
+                    if (_shutdownRequested) break;
                 }
             }
         }
@@ -268,9 +276,11 @@ public class FlvDownloadService
 
     public void Cancel()
     {
-        _cancelCts?.Cancel();
+        _shutdownRequested = true;
         _http.CancelPendingRequests();
     }
+
+    private volatile bool _shutdownRequested;
 
     private static bool TryExtractFlvPrefix(List<byte> raw, out byte[] prefix)
     {

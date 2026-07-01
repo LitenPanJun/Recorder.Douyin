@@ -7,13 +7,12 @@ namespace Downloader.Douyin;
 public class StreamDownloader
 {
     private readonly FlvDownloadService _flvDownloader;
-    private readonly HevcEncodingService _hevcEncoder;
-    private static readonly SemaphoreSlim _encodeThrottle = new(1, 1);
+    private readonly HevcEncodingService _hevcEncoder = new();
+    private readonly SemaphoreSlim _encodeThrottle = new(1, 1);
 
     public StreamDownloader()
     {
         _flvDownloader = new FlvDownloadService();
-        _hevcEncoder = new HevcEncodingService();
     }
 
     public async Task<DownloadResult> DownloadAsync(
@@ -56,9 +55,11 @@ public class StreamDownloader
 
                     var task = Task.Run(async () =>
                     {
-                        await _encodeThrottle.WaitAsync(CancellationToken.None);
+                        var encodeCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
                         try
                         {
+                            await _encodeThrottle.WaitAsync(encodeCts.Token);
+
                             var mkvPath = Path.ChangeExtension(flvPath, ".mkv");
 
                             progress?.Report(new DownloadProgress
@@ -80,7 +81,7 @@ public class StreamDownloader
                             using (var fs = new FileStream(flvPath, FileMode.Open, FileAccess.Read, FileShare.Read))
                             {
                                 var sig = new byte[3];
-                                if (await fs.ReadAsync(sig, 0, 3, CancellationToken.None) != 3 ||
+                                if (await fs.ReadAsync(sig, 0, 3, encodeCts.Token) != 3 ||
                                     sig[0] != 'F' || sig[1] != 'L' || sig[2] != 'V')
                                 {
                                     Console.Error.WriteLine(
@@ -94,7 +95,7 @@ public class StreamDownloader
                             await _hevcEncoder.EncodeAsync(
                                 flvPath, mkvPath, hevcCrf,
                                 progress: null,
-                                ct: CancellationToken.None);
+                                ct: encodeCts.Token);
                             sw.Stop();
 
                             File.Delete(flvPath);
@@ -128,6 +129,7 @@ public class StreamDownloader
                         finally
                         {
                             _encodeThrottle.Release();
+                            encodeCts.Dispose();
                         }
                     });
 

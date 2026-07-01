@@ -1,8 +1,11 @@
+using System.Diagnostics;
 using API.Douyin;
 using API.Douyin.Models;
 using Downloader.Douyin;
 using Downloader.Douyin.Models;
 using Downloader.Douyin.Services;
+using DouyinDanmaku.Models;
+using DouyinDanmaku.Services;
 using Recorder.Core.Models;
 
 namespace Recorder.Core.Services;
@@ -141,7 +144,63 @@ public class StreamerRecorder
         Directory.CreateDirectory(outputDir);
         var outputBasePath = Path.Combine(outputDir, $"{datePart}_{safeTitle}");
 
-        var progressObj = new Progress<DownloadProgress>(OnDownloadProgress);
+        var recordingStopwatch = Stopwatch.StartNew();
+        var danmakuCount = 0;
+
+        // 弹幕录制
+        var danmakuClient = new DouyinDanmakuClient();
+        var danmakuPath = $"{outputBasePath}_Danmaku.txt";
+
+        danmakuClient.OnMessage += msg =>
+        {
+            Interlocked.Increment(ref danmakuCount);
+            var elapsed = recordingStopwatch.Elapsed;
+            var tc = $"{(int)elapsed.TotalHours:D2}:{elapsed.Minutes:D2}:{elapsed.Seconds:D2}";
+            var line = $"[{tc}] [{msg.Type}] {msg.UserName}: {msg.Content}";
+            try { File.AppendAllText(danmakuPath, line + "\n"); }
+            catch { }
+        };
+
+        danmakuClient.OnReady += () =>
+        {
+            try
+            {
+                var elapsed = recordingStopwatch.Elapsed;
+                var tc = $"{(int)elapsed.TotalHours:D2}:{elapsed.Minutes:D2}:{elapsed.Seconds:D2}";
+                File.AppendAllText(danmakuPath, $"[{tc}] [系统] 弹幕连接已建立\n");
+            }
+            catch { }
+        };
+
+        if (detail.DanmakuData != null)
+        {
+            var danmakuArgs = new DouyinDanmakuArgs(
+                detail.DanmakuData.WebRid,
+                detail.DanmakuData.RoomId,
+                detail.DanmakuData.UserId,
+                detail.DanmakuData.Cookie);
+
+            _ = danmakuClient.StartAsync(danmakuArgs).ContinueWith(t =>
+            {
+                if (t.IsFaulted)
+                    Console.Error.WriteLine($"\n[弹幕错误] {t.Exception?.InnerException?.Message}");
+            });
+        }
+
+        // 下载
+        var progressObj = new Progress<DownloadProgress>(p =>
+        {
+            Status.BytesDownloaded = p.BytesDownloaded;
+            Status.SpeedFormatted = p.SpeedFormatted;
+            Status.Elapsed = p.Elapsed;
+
+            if (!string.IsNullOrEmpty(p.CurrentSegment) && p.CurrentSegment.Contains("HEVC"))
+                SetStatus("编码中", p.CurrentSegment);
+            else if (!string.IsNullOrEmpty(p.CurrentSegment))
+                SetStatus("录制中", p.CurrentSegment);
+
+            StatusChanged?.Invoke(Status);
+        });
 
         DownloadResult? result;
         try
@@ -152,26 +211,18 @@ public class StreamerRecorder
                 SegmentDuration, EnableHevc, Crf,
                 progressObj, _cts.Token);
         }
-        catch (OperationCanceledException)
+        finally
         {
-            if (!_cts.IsCancellationRequested)
-            {
-                SetStatus("等待中", "录制被中断");
-            }
-            return;
-        }
-        catch (Exception ex)
-        {
-            SetStatus("错误", $"下载失败: {ex.Message}");
-            return;
+            await danmakuClient.StopAsync();
         }
 
-        if (result.SegmentFiles.Count == 0)
+        if (result == null || result.SegmentFiles.Count == 0)
         {
             SetStatus("等待中", "未获取到分段");
             return;
         }
 
+        // 合并
         SetStatus("合并中");
         var ext = EnableHevc ? ".mkv" : ".flv";
         var mergedPath = $"{outputBasePath}{ext}";
@@ -181,7 +232,7 @@ public class StreamerRecorder
             if (result.SegmentFiles.Count > 1)
             {
                 await SegmentMerger.MergeAsync(
-                    result.SegmentFiles, mergedPath, ct: CancellationToken.None);
+                    result.SegmentFiles, mergedPath, ct: _cts.Token);
 
                 foreach (var seg in result.SegmentFiles)
                 {
@@ -192,6 +243,10 @@ public class StreamerRecorder
             {
                 File.Move(result.SegmentFiles[0], mergedPath);
             }
+        }
+        catch (OperationCanceledException)
+        {
+            return;
         }
         catch (Exception ex)
         {
@@ -236,24 +291,6 @@ public class StreamerRecorder
     {
         Status.State = state;
         Status.Detail = detail;
-        StatusChanged?.Invoke(Status);
-    }
-
-    private void OnDownloadProgress(DownloadProgress p)
-    {
-        Status.BytesDownloaded = p.BytesDownloaded;
-        Status.SpeedFormatted = p.SpeedFormatted;
-        Status.Elapsed = p.Elapsed;
-
-        if (!string.IsNullOrEmpty(p.CurrentSegment) && p.CurrentSegment.Contains("HEVC"))
-        {
-            SetStatus("编码中", p.CurrentSegment);
-        }
-        else if (!string.IsNullOrEmpty(p.CurrentSegment))
-        {
-            SetStatus("录制中", p.CurrentSegment);
-        }
-
         StatusChanged?.Invoke(Status);
     }
 
