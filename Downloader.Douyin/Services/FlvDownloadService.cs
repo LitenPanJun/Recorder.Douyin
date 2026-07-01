@@ -94,11 +94,11 @@ public class FlvDownloadService
                         var expectedPts = (segmentIndex - 1) * (long)segDuration.TotalMilliseconds;
                         segmentPrefix = AdjustCodecPts(segmentPrefix, expectedPts, expectedPts);
                         await currentSegment.WriteAsync(
-                            segmentPrefix, 0, segmentPrefix.Length, token);
+                            segmentPrefix, 0, segmentPrefix.Length, CancellationToken.None);
 
                         var initBuf = new byte[81920];
                         var initRead = await responseStream.ReadAsync(
-                            initBuf.AsMemory(0, initBuf.Length), token);
+                            initBuf.AsMemory(0, initBuf.Length), CancellationToken.None);
                         if (initRead > 0)
                         {
                             int firstTagStart = -1;
@@ -143,7 +143,7 @@ public class FlvDownloadService
                             }
                             var writeFrom = firstTagStart >= 0 ? firstTagStart : 0;
                             await currentSegment.WriteAsync(
-                                initBuf, writeFrom, initRead - writeFrom, token);
+                                initBuf, writeFrom, initRead - writeFrom, CancellationToken.None);
                         }
                     }
                 }
@@ -169,10 +169,10 @@ public class FlvDownloadService
                         // buffer[0..13] = FLV header + PreviousTagSize (keep)
                         // buffer[13..tagEnd] = onMetaData tag (skip)
                         // buffer[tagEnd..] = remaining data (keep)
-                        await currentSegment.WriteAsync(buffer, 0, 13, token);
+                        await currentSegment.WriteAsync(buffer, 0, 13, CancellationToken.None);
                         var rest = bytesRead - tagEnd;
                         if (rest > 0)
-                            await currentSegment.WriteAsync(buffer, tagEnd, rest, token);
+                            await currentSegment.WriteAsync(buffer, tagEnd, rest, CancellationToken.None);
 
                         seg1Raw.AddRange(buffer.AsSpan(0, 13));
                         if (rest > 0)
@@ -183,13 +183,13 @@ public class FlvDownloadService
                     }
                     else
                     {
-                        await currentSegment.WriteAsync(buffer, 0, bytesRead, token);
+                        await currentSegment.WriteAsync(buffer, 0, bytesRead, CancellationToken.None);
                         seg1Raw.AddRange(buffer.AsSpan(0, bytesRead));
                     }
                 }
                 else
                 {
-                    await currentSegment.WriteAsync(buffer, 0, bytesRead, token);
+                    await currentSegment.WriteAsync(buffer, 0, bytesRead, CancellationToken.None);
                     if (segmentIndex == 1 && segmentPrefix == null)
                         seg1Raw.AddRange(buffer.AsSpan(0, bytesRead));
                 }
@@ -223,7 +223,7 @@ public class FlvDownloadService
                     if (segmentIndex > 0 && currentSegment!.Length < minSegBytes)
                         continue;
 
-                    await currentSegment.FlushAsync(token);
+                    await currentSegment.FlushAsync(CancellationToken.None);
                     await currentSegment.DisposeAsync();
                     var completedPath = currentSegmentPath!;
                     var completedIndex = segmentIndex;
@@ -234,7 +234,7 @@ public class FlvDownloadService
                         try
                         {
                             await onSegmentCompleted(
-                                completedIndex, completedPath, fileSize, token);
+                                completedIndex, completedPath, fileSize, CancellationToken.None);
                         }
                         catch
                         {
@@ -255,25 +255,18 @@ public class FlvDownloadService
         {
             if (currentSegment != null)
             {
-                await currentSegment.FlushAsync(token);
+                await currentSegment.FlushAsync(CancellationToken.None);
                 await currentSegment.DisposeAsync();
                 var finalPath = currentSegmentPath!;
                 var fileSize = new FileInfo(finalPath).Length;
 
-                if (segmentIndex > 1 && segmentPrefix != null
-                    && fileSize < segmentPrefix.Length + 4096)
-                {
-                    try { File.Delete(finalPath); } catch { }
-                    segmentFiles.Remove(finalPath);
-                    Console.Error.WriteLine(
-                        $"[FlvDownload] 分段 {segmentIndex} 数据过小 ({fileSize}B)，已删除");
-                }
-                else if (fileSize > 0 && onSegmentCompleted != null)
+                // 最后一段始终加入转码队列（即使文件小），确保回放不丢失
+                if (fileSize > 0 && onSegmentCompleted != null)
                 {
                     try
                     {
                         await onSegmentCompleted(
-                            segmentIndex, finalPath, fileSize, token);
+                            segmentIndex, finalPath, fileSize, CancellationToken.None);
                     }
                     catch
                     {
