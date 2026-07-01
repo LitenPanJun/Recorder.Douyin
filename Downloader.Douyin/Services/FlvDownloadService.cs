@@ -86,17 +86,31 @@ public class FlvDownloadService
                     segmentStartTime = stopwatch.Elapsed;
                     segmentFiles.Add(currentSegmentPath);
 
-                    if (segmentIndex == 1)
+                    if (segmentIndex >= 2)
                     {
-                        // Segment 1: nothing extra to write before the main loop data
-                    }
-                    else if (segmentPrefix != null)
-                    {
-                        var expectedPts = (segmentIndex - 1) * (long)segDuration.TotalMilliseconds;
-                        segmentPrefix = AdjustCodecPts(segmentPrefix, expectedPts, expectedPts);
+                        // 分段 2+：始终写入 FLV 头（含代码头或最小头），确保文件可被 ffmpeg 识别
+                        byte[] segStart;
+                        if (segmentPrefix != null)
+                        {
+                            var expectedPts = (segmentIndex - 1) * (long)segDuration.TotalMilliseconds;
+                            segStart = AdjustCodecPts(segmentPrefix, expectedPts, expectedPts);
+                        }
+                        else
+                        {
+                            // 代码头未就绪时写入最小 FLV 头
+                            segStart =
+                            [
+                                0x46, 0x4C, 0x56,       // "FLV"
+                                0x01,                   // version 1
+                                0x05,                   // flags: audio+video
+                                0x00, 0x00, 0x00, 0x09, // header size = 9
+                                0x00, 0x00, 0x00, 0x00  // PreviousTagSize0 = 0
+                            ];
+                        }
                         await currentSegment.WriteAsync(
-                            segmentPrefix, 0, segmentPrefix.Length, CancellationToken.None);
+                            segStart, 0, segStart.Length, CancellationToken.None);
 
+                        // 从流中读取下一块数据，对齐到首个有效 FLV tag
                         var initBuf = new byte[81920];
                         var initRead = await responseStream.ReadAsync(
                             initBuf.AsMemory(0, initBuf.Length), CancellationToken.None);
@@ -112,12 +126,10 @@ public class FlvDownloadService
                                 var nextP = tagEnd + 4;
                                 if (nextP + 15 <= initRead)
                                 {
-                                    // 双校验：确认下一个 tag 同样有效，排除假阳性
                                     if (!IsValidTag(initBuf, nextP, initRead)) { p++; continue; }
                                 }
                                 else
                                 {
-                                    // 数据不足无法校验下一 tag — 不接受此候选，继续扫描
                                     p++; continue;
                                 }
                                 firstTagStart = p;

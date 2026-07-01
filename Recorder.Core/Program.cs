@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Text;
 using API.Douyin;
 using Downloader.Douyin;
 using Downloader.Douyin.Services;
@@ -8,6 +9,13 @@ using Recorder.Core.Services;
 Console.OutputEncoding = System.Text.Encoding.UTF8;
 
 try { Console.CursorVisible = true; } catch { }
+
+// 全局控制台锁 — 所有 Console 写入（含 set-cursor-position）经过同一锁防止交错
+var consoleLock = new object();
+var origErr = Console.Error;
+var origOut = Console.Out;
+Console.SetError(new LockedTextWriter(origErr, consoleLock));
+Console.SetOut(new LockedTextWriter(origOut, consoleLock));
 
 #region CLI 参数
 
@@ -79,28 +87,58 @@ Console.CancelKeyPress += (_, args) =>
 
 #endregion
 
-#region 状态渲染 (每 2 秒)
+#region 状态渲染 (每 2 秒固定行)
+
+var statusOriginRow = -1;
+var prevStatusLines = 0;
 
 void RenderStatus()
 {
     var entries = statuses.Values.ToArray();
-    if (entries.Length == 0) return;
+    if (entries.Length == 0) { prevStatusLines = 0; return; }
 
-    var now = DateTime.Now;
-    var ts = $"[{now:HH:mm:ss}]";
+    var totalLines = entries.Length;
 
-    foreach (var s in entries)
+    if (statusOriginRow < 0)
+        statusOriginRow = Console.CursorTop;
+
+    // 主播数减少时擦除残影；增加时自然覆盖
+    Monitor.Enter(consoleLock);
+    try
     {
-        var detail = !string.IsNullOrEmpty(s.Detail) ? $" ({s.Detail})" : "";
-        var size = s.BytesDownloaded > 0 ? $" {FormatSize(s.BytesDownloaded)}" : "";
-        var speed = !string.IsNullOrEmpty(s.SpeedFormatted) ? $" @ {s.SpeedFormatted}" : "";
+        Console.SetCursorPosition(0, statusOriginRow);
+        var now = DateTime.Now;
+        var ts = $"[{now:HH:mm:ss}]";
+        var width = Console.WindowWidth - 1;
+        if (width < 20) width = 79;
 
-        var line = $"{ts} {s.Name}: {s.State}{detail}{size}{speed}";
-        Console.Write("\r" + line + new string(' ', Math.Max(0, Console.WindowWidth - line.Length - 1)) + "\n");
+        foreach (var s in entries)
+        {
+            var detail = !string.IsNullOrEmpty(s.Detail) ? $" ({s.Detail})" : "";
+            var size = s.BytesDownloaded > 0 ? $" {FormatSize(s.BytesDownloaded)}" : "";
+            var speed = !string.IsNullOrEmpty(s.SpeedFormatted) ? $" @ {s.SpeedFormatted}" : "";
+            var line = $"{ts} {s.Name}: {s.State}{detail}{size}{speed}";
+            if (line.Length > width) line = line[..width];
+            Console.Write(line.PadRight(width) + "\n");
+        }
+
+        // 主播减少时擦除旧行
+        for (var i = totalLines; i < prevStatusLines; i++)
+            Console.Write("".PadRight(width) + "\n");
+
+        prevStatusLines = totalLines;
+    }
+    finally
+    {
+        Monitor.Exit(consoleLock);
     }
 }
 
-var statusTimer = new Timer(_ => { try { RenderStatus(); } catch { } }, null, 2000, 2000);
+var statusTimer = new Timer(_ =>
+{
+    try { RenderStatus(); }
+    catch { }
+}, null, 2000, 2000);
 
 #endregion
 
@@ -192,4 +230,37 @@ static string FormatSize(long bytes)
     if (bytes >= 1024)
         return $"{bytes / 1024.0:F1} KB";
     return $"{bytes} B";
+}
+
+/// <summary>将所有 Console.Out/Error 写入统一经过同一锁，防止与 SetCursorPosition 交错。</summary>
+file sealed class LockedTextWriter : TextWriter
+{
+    private readonly TextWriter _inner;
+    private readonly object _lock;
+    public LockedTextWriter(TextWriter inner, object lockObj)
+    {
+        _inner = inner;
+        _lock = lockObj;
+    }
+    public override Encoding Encoding => _inner.Encoding;
+    public override void Write(char value)
+    {
+        lock (_lock) { _inner.Write(value); }
+    }
+    public override void Write(char[] buffer, int index, int count)
+    {
+        lock (_lock) { _inner.Write(buffer, index, count); }
+    }
+    public override void Write(string? value)
+    {
+        lock (_lock) { _inner.Write(value); }
+    }
+    public override void WriteLine(string? value)
+    {
+        lock (_lock) { _inner.WriteLine(value); }
+    }
+    public override void WriteLine()
+    {
+        lock (_lock) { _inner.Write("\n"); }
+    }
 }
