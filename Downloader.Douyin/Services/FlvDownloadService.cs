@@ -337,8 +337,9 @@ public class FlvDownloadService
             pos += tagLen + 4;
         }
 
-        if ((hasVideo && avcHeader == null) || (hasAudio && aacHeader == null))
-            return false;
+        // 即使缺失预期的代码头，仍然返回有效 FLV 头作为前缀，
+        // 确保分段 2+ 至少能被 ffmpeg 识别为 FLV 格式。
+        // 实际编码配置数据会在后续首个关键帧/音频帧中出现。
 
         using var ms = new MemoryStream();
         ms.Write(raw.GetRange(0, 9).ToArray());
