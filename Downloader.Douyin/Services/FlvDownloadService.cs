@@ -110,34 +110,46 @@ public class FlvDownloadService
                         await currentSegment.WriteAsync(
                             segStart, 0, segStart.Length, CancellationToken.None);
 
-                        // 从流中读取下一块数据，对齐到首个有效 FLV tag
-                        var initBuf = new byte[81920];
-                        var initRead = await responseStream.ReadAsync(
-                            initBuf.AsMemory(0, initBuf.Length), CancellationToken.None);
-                        if (initRead > 0)
+                        // 从流中读取数据，扫描首个有效 FLV tag 边界（最多 256KB），
+                        // 避免大视频帧跨段边界时写入裸流中间数据。
+                        var initBuf = new byte[262144];
+                        var totalInit = 0;
+                        var foundTag = false;
+                        var tagPos = -1;
+                        while (!foundTag && totalInit < initBuf.Length)
                         {
-                            int firstTagStart = -1;
+                            var chunk = await responseStream.ReadAsync(
+                                initBuf.AsMemory(totalInit, initBuf.Length - totalInit), token);
+                            if (chunk == 0) break;
+                            totalInit += chunk;
+
                             var p = 0;
-                            while (p + 15 <= initRead)
+                            while (p + 15 <= totalInit)
                             {
-                                if (!IsValidTag(initBuf, p, initRead)) { p++; continue; }
+                                if (!IsValidTag(initBuf, p, totalInit)) { p++; continue; }
                                 var ds = (initBuf[p + 1] << 16) | (initBuf[p + 2] << 8) | initBuf[p + 3];
                                 var tagEnd = p + 11 + ds;
                                 var nextP = tagEnd + 4;
-                                if (nextP + 15 <= initRead)
+                                if (nextP + 15 <= totalInit)
                                 {
-                                    if (!IsValidTag(initBuf, nextP, initRead)) { p++; continue; }
+                                    if (!IsValidTag(initBuf, nextP, totalInit)) { p++; continue; }
                                 }
                                 else
                                 {
                                     p++; continue;
                                 }
-                                firstTagStart = p;
+                                tagPos = p;
+                                foundTag = true;
                                 break;
                             }
-                            var writeFrom = firstTagStart >= 0 ? firstTagStart : 0;
-                            await currentSegment.WriteAsync(
-                                initBuf, writeFrom, initRead - writeFrom, CancellationToken.None);
+                        }
+                        if (totalInit > 0)
+                        {
+                            // 未找到合法 tag 时舍弃此块数据（跨段残余），让主循环写后续干净数据
+                            var writeFrom = foundTag ? tagPos : totalInit;
+                            if (writeFrom < totalInit)
+                                await currentSegment.WriteAsync(
+                                    initBuf, writeFrom, totalInit - writeFrom, CancellationToken.None);
                         }
                     }
                 }
