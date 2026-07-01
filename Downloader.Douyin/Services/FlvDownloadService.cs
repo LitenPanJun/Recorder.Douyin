@@ -278,6 +278,11 @@ public class FlvDownloadService
                 }
             }
         }
+        catch (Exception ex) when (!ct.IsCancellationRequested)
+        {
+            Console.Error.WriteLine($"\n[下载错误] {ex.Message}");
+            // 即使传输错误仍继续到 finally，让已下载分段能进入编码/合并
+        }
         finally
         {
             if (currentSegment != null)
