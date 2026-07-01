@@ -177,7 +177,7 @@ public class ApiService
         {
         }
 
-        return await GetRoomDetailByHtmlAsync(webRid);
+        throw new Exception("当前未开播");
     }
 
     private async Task<LiveRoomDetail> GetRoomDetailByApiAsync(string webRid)
