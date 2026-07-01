@@ -11,7 +11,18 @@ Console.OutputEncoding = System.Text.Encoding.UTF8;
 try { Console.CursorVisible = true; } catch { }
 
 // 错误日志文件 + 全局控制台锁
-var errorLogPath = Path.Combine(AppContext.BaseDirectory, "error.log");
+var logDir = Path.Combine(AppContext.BaseDirectory, "logs");
+Directory.CreateDirectory(logDir);
+var datePart = DateTime.Now.ToString("yyyy-MM-dd");
+var maxSeq = 0;
+foreach (var f in Directory.GetFiles(logDir, $"{datePart}_*.log"))
+{
+    var name = Path.GetFileNameWithoutExtension(f);
+    var seqStr = name[(datePart.Length + 1)..];
+    if (int.TryParse(seqStr, out var seq) && seq > maxSeq)
+        maxSeq = seq;
+}
+var errorLogPath = Path.Combine(logDir, $"{datePart}_{maxSeq + 1:D3}.log");
 var errorLog = new ErrorLogWriter(new StreamWriter(errorLogPath, append: false, Encoding.UTF8));
 var consoleLock = errorLog.Lock;
 var origOut = Console.Out;
@@ -317,7 +328,7 @@ file sealed class ErrorLogWriter : TextWriter
     public object Lock { get; }
     public int ErrorCount => _errorCount;
 
-    public ErrorLogWriter(StreamWriter file, TextWriter? origOut = null)
+    public ErrorLogWriter(StreamWriter file)
     {
         _file = file;
         Lock = new object();
@@ -330,7 +341,12 @@ file sealed class ErrorLogWriter : TextWriter
     public override void WriteLine(string? value)
     {
         if (string.IsNullOrEmpty(value)) return;
-        Interlocked.Increment(ref _errorCount);
+
+        var isInfo = value.StartsWith("[INFO] ", StringComparison.Ordinal);
+        var isWarn = value.StartsWith("[WARN] ", StringComparison.Ordinal);
+        if (!isInfo && !isWarn)
+            Interlocked.Increment(ref _errorCount);
+
         lock (Lock)
         {
             _file.Write($"[{DateTime.Now:HH:mm:ss}] ");

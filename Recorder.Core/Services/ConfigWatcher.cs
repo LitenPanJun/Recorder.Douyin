@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Recorder.Core.Models;
+using Recorder.Shared;
 
 namespace Recorder.Core.Services;
 
@@ -72,7 +73,7 @@ public class ConfigWatcher : IDisposable
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"[配置] 重载失败: {ex.Message}");
+            Log.Error($"[配置] 重载失败: {ex.Message}");
         }
     }
 

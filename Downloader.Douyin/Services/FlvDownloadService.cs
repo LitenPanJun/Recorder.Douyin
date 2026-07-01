@@ -72,7 +72,7 @@ public class FlvDownloadService
                 {
                     _shutdownRequested = true;
                     shutdownStart = stopwatch.Elapsed;
-                    Console.Error.WriteLine("\n[下载] 正在等待可截断点后停止...");
+                    Log.Info("[下载] 正在等待可截断点后停止...");
                 }
 
                 if (currentSegment == null)
@@ -280,7 +280,7 @@ public class FlvDownloadService
         }
         catch (Exception ex) when (!ct.IsCancellationRequested)
         {
-            Console.Error.WriteLine($"\n[下载错误] {ex.Message}");
+            Log.Error($"[下载错误] {ex.Message}");
             // 即使传输错误仍继续到 finally，让已下载分段能进入编码/合并
         }
         finally

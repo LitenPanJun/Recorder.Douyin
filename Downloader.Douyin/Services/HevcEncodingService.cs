@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text;
 using System.Text.RegularExpressions;
+using Recorder.Shared;
 
 namespace Downloader.Douyin.Services;
 
@@ -141,7 +142,7 @@ public class HevcEncodingService
             var msg = string.Join(" | ", relevant);
             if (string.IsNullOrEmpty(msg))
                 msg = stderr.Length > 200 ? stderr[..200] + "..." : stderr;
-            Console.Error.WriteLine($"[ffmpeg] Failed (exit {process.ExitCode}): {msg}");
+            Log.Error($"[ffmpeg] Failed (exit {process.ExitCode}): {msg}");
             throw new Exception(
                 $"ffmpeg encode failed (exit {process.ExitCode})\n{stderr}");
         }
@@ -207,8 +208,8 @@ public class HevcEncodingService
                 if (proc.ExitCode == 0)
                 {
                     var firstLine = proc.StandardOutput.ReadLine() ?? "";
-                    Console.Error.WriteLine($"[ffmpeg] 已找到: {candidate}");
-                    Console.Error.WriteLine($"[ffmpeg] 版本: {firstLine}");
+                    Log.Info($"[ffmpeg] 已找到: {candidate}");
+                    Log.Info($"[ffmpeg] 版本: {firstLine}");
                     return candidate;
                 }
             }
