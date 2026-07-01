@@ -406,8 +406,8 @@ public class FlvDownloadService
             pos += tagLen + 4;
         }
 
-        if ((hasVideo && avcHeader == null && hevcHeader == null) ||
-            (hasAudio && aacHeader == null))
+        // 仅视频需要代码头（HEVC 编码需要 SPS/PPS），音频 -c:a copy 无需 extradata
+        if (hasVideo && avcHeader == null && hevcHeader == null)
             return false;
 
         using var ms = new MemoryStream();
