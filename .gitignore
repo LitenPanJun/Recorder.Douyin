@@ -6,6 +6,7 @@
 # 但保留 .gitignore 文件本身（允许文件，仅忽略目录）
 !.gitignore
 !AGENTS.md
+!.github/
 
 # ==============================================================================
 # Visual Studio / .NET 标准忽略规则
@@ -55,6 +56,9 @@ bld/
 # Build results on 'Bin' directories
 **/[Bb]in/*
 !**/[Bb]in/*.refresh
+
+# Build output directory (from build-release.ps1)
+dist/
 
 # Visual Studio cache/options directory (already covered by .*/ above)
 # .vs/
