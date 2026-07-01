@@ -37,7 +37,7 @@ git add -A && git commit -m "refactor(stream): 提取重复的 HTTP 工具方法
 
 | 分支 | 用途 | 来源 |
 |------|------|------|
-| `main` | 生产就绪代码，仅接受合并 | — |
+| `main` | 生产就绪代码，仅当用户明确要求时合并 | — |
 | `develop` | 主开发分支 | `main` |
 | `feature/<name>` | 功能特性开发 | `develop` |
 | `fix/<name>` | 缺陷修复 | `develop` |
@@ -99,6 +99,7 @@ git status
 4. `.libs/` 为原始参考，不得直接修改；其副本（`Danmaku.Douyin/`、`Downloader.Douyin/`）可进行合理抽象、解耦和改造，但**不得过度解耦**，应保持类库与录播姬核心的分离状态
 5. 本项目模块遵循 `Recorder.<模块名>` 命名约定（如 `Recorder.Core`）
 6. 若有超出规则的新要求，按新要求执行但不修改规则文件本身
+7. `main` 分支禁止主动合并——除非用户明确要求，否则不得将任何分支合并到 `main`
 
 ## 开源协议
 
