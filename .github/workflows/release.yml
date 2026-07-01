@@ -29,8 +29,10 @@ jobs:
           }
           else
           {
-            git fetch origin +refs/heads/main:refs/remotes/origin/main
-            if (git merge-base --is-ancestor HEAD origin/main 2>$null)
+            git fetch origin +refs/heads/main:refs/remotes/origin/main 2>&1 | Out-Null
+            $head = git rev-parse HEAD 2>$null
+            $mergeBase = git merge-base HEAD origin/main 2>$null
+            if ($head -and $mergeBase -and $mergeBase -eq $head)
             {
               echo "unique=false" >> $env:GITHUB_OUTPUT
             }
