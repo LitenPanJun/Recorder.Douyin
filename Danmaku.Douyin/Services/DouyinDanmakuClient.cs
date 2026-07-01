@@ -109,7 +109,7 @@ public class DouyinDanmakuClient : IDisposable
 
     private void SendJoinRoom()
     {
-        SendFrame(new PushFrame { PayloadType = "hb" });
+        SendFrame(new PushFrame { PayloadType = "sr" });
     }
 
     private void SendFrame(PushFrame frame)

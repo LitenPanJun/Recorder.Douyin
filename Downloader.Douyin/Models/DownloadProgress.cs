@@ -1,3 +1,5 @@
+using Recorder.Shared;
+
 namespace Downloader.Douyin.Models;
 
 public class DownloadProgress
@@ -27,8 +29,8 @@ public class DownloadProgress
 
     public override string ToString()
     {
-        var total = TotalBytes.HasValue ? FormatSize(TotalBytes.Value) : "未知";
-        var downloaded = FormatSize(BytesDownloaded);
+        var total = TotalBytes.HasValue ? SharedUtils.FormatSize(TotalBytes.Value) : "未知";
+        var downloaded = SharedUtils.FormatSize(BytesDownloaded);
         var pct = TotalBytes.HasValue ? $" {Percentage}%" : "";
         var seg = !string.IsNullOrEmpty(CurrentSegment)
             ? $" {CurrentSegment}"
@@ -37,16 +39,5 @@ public class DownloadProgress
                 : "";
         var elapsed = $"耗时: {(int)Elapsed.TotalHours:D2}:{Elapsed.Minutes:D2}:{Elapsed.Seconds:D2}";
         return $"已下载: {downloaded}/{total}{pct} | 速度: {SpeedFormatted} | {elapsed}{seg}";
-    }
-
-    private static string FormatSize(long bytes)
-    {
-        if (bytes >= 1024L * 1024 * 1024)
-            return $"{bytes / (1024.0 * 1024 * 1024):F2} GB";
-        if (bytes >= 1024 * 1024)
-            return $"{bytes / (1024.0 * 1024):F1} MB";
-        if (bytes >= 1024)
-            return $"{bytes / 1024.0:F1} KB";
-        return $"{bytes} B";
     }
 }

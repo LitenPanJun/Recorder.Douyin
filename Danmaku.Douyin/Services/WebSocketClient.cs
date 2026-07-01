@@ -140,7 +140,7 @@ public class WebSocketClient : IDisposable
             while (_ws?.State == WebSocketState.Open && !_stopping)
             {
                 var result = await _ws.ReceiveAsync(
-                    new ArraySegment<byte>(buffer), CancellationToken.None);
+                    new ArraySegment<byte>(buffer), _cts?.Token ?? CancellationToken.None);
 
                 if (result.MessageType == WebSocketMessageType.Close)
                 {

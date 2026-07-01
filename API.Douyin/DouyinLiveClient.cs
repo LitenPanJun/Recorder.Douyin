@@ -36,22 +36,6 @@ public class DouyinLiveClient
         return await _api.GetPlayQualitiesAsync(detail);
     }
 
-    public async Task<LiveRoomDetailResult> GetRoomDetailWithQualitiesAsync(string roomId)
-    {
-        var detail = await GetRoomDetailAsync(roomId);
-        var qualities = await GetPlayQualitiesAsync(detail);
-        return new LiveRoomDetailResult
-        {
-            Detail = detail,
-            Qualities = qualities
-        };
-    }
-
-    public async Task<List<string>> GetPlayUrlsAsync(LiveRoomDetail detail, PlayQuality quality)
-    {
-        return new List<string>(quality.Urls);
-    }
-
     public void SetCookie(string cookie)
     {
         _cookies.SetCookie(cookie);

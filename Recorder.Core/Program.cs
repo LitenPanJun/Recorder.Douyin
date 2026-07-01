@@ -190,14 +190,16 @@ if (string.IsNullOrEmpty(streamUrl))
     return;
 }
 
+var ext = enableHevc ? ".mkv" : ".flv";
+
 var progressObj = new Progress<DownloadProgress>(p =>
 {
     if (!downloadCompleted && !cancelCts.Token.IsCancellationRequested)
     {
         var total = p.TotalBytes.HasValue
-            ? $"{FormatSize(p.TotalBytes.Value),8}"
+            ? $"{SharedUtils.FormatSize(p.TotalBytes.Value),8}"
             : "    未知";
-        Console.Write($"\r推流: {FormatSize(p.BytesDownloaded),8} / {total}  速度: {p.SpeedFormatted,10}  弹幕: {danmakuCount,5} 条  {p.CurrentSegment,-20}");
+        Console.Write($"\r推流: {SharedUtils.FormatSize(p.BytesDownloaded),8} / {total}  速度: {p.SpeedFormatted,10}  弹幕: {danmakuCount,5} 条  {p.CurrentSegment,-20}");
     }
 });
 
@@ -244,7 +246,6 @@ if (downloadResult.SegmentFiles.Count > 1)
 {
     Console.Write("正在合并分段... ");
 
-    var ext = enableHevc ? ".mkv" : ".flv";
     var mergedPath = $"{outputBasePath}{ext}";
 
     try
@@ -268,7 +269,6 @@ if (downloadResult.SegmentFiles.Count > 1)
 }
 else if (downloadResult.SegmentFiles.Count == 1)
 {
-    var ext = enableHevc ? ".mkv" : ".flv";
     var mergedPath = $"{outputBasePath}{ext}";
     File.Move(downloadResult.SegmentFiles[0], mergedPath);
 }
@@ -280,8 +280,8 @@ else if (downloadResult.SegmentFiles.Count == 1)
 Console.WriteLine($"\n=== 录制摘要 ===");
 Console.WriteLine($"  主播: {detail.UserName}");
 Console.WriteLine($"  标题: {detail.Title}");
-Console.WriteLine($"  文件: {outputBasePath}{(enableHevc ? ".mkv" : ".flv")}");
-Console.WriteLine($"  大小: {FormatSize(downloadResult.TotalBytes)}");
+Console.WriteLine($"  文件: {outputBasePath}{ext}");
+Console.WriteLine($"  大小: {SharedUtils.FormatSize(downloadResult.TotalBytes)}");
 Console.WriteLine($"  分段: {downloadResult.SegmentCount} 个");
 Console.WriteLine($"  弹幕: {danmakuCount} 条");
 Console.WriteLine($"  耗时: {(int)downloadResult.Elapsed.TotalHours:D2}:{downloadResult.Elapsed.Minutes:D2}:{downloadResult.Elapsed.Seconds:D2}");
@@ -293,15 +293,4 @@ static string SanitizeFileName(string name)
 {
     var invalid = Path.GetInvalidFileNameChars();
     return string.Concat(name.Select(c => invalid.Contains(c) ? '_' : c));
-}
-
-static string FormatSize(long bytes)
-{
-    if (bytes >= 1024L * 1024 * 1024)
-        return $"{bytes / (1024.0 * 1024 * 1024):F2} GB";
-    if (bytes >= 1024 * 1024)
-        return $"{bytes / (1024.0 * 1024):F1} MB";
-    if (bytes >= 1024)
-        return $"{bytes / 1024.0:F1} KB";
-    return $"{bytes} B";
 }

@@ -7,7 +7,6 @@ namespace DouyinDanmaku.Services;
 
 public class DouyinSign
 {
-    private static string? _abogusJs;
     private static string? _mssdkJs;
     private static readonly object _lock = new();
 
@@ -18,24 +17,6 @@ public class DouyinSign
             ?? throw new FileNotFoundException($"Embedded resource not found: {resourceName}");
         using var reader = new StreamReader(stream);
         return reader.ReadToEnd();
-    }
-
-    public static string GetABogusSignature(string urlSearchParams, string userAgent)
-    {
-        lock (_lock)
-        {
-            _abogusJs ??= LoadEmbeddedJs("DouyinDanmaku.Services.abogus.js");
-        }
-
-        var engine = new Engine(options =>
-        {
-            options.TimeoutInterval(TimeSpan.FromSeconds(10));
-            options.MaxStatements(100000);
-            options.LimitMemory(50_000_000);
-        });
-
-        engine.Execute(_abogusJs);
-        return engine.Invoke("getABogus", urlSearchParams, userAgent).AsString();
     }
 
     // Matches Dart getMsStub(roomId, uniqueId)
