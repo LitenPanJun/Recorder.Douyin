@@ -11,13 +11,21 @@
     Windows → .zip,  Linux → .tar.gz
 #>
 param(
-    [string]$Version = "0.1.1",
+    [string]$Version,
     [string[]]$Rids = @("win-x64", "win-arm64", "linux-x64", "linux-arm64")
 )
 
 $ErrorActionPreference = "Stop"
 $Project = "Recorder.Core\Recorder.Core.csproj"
 $DistRoot = Join-Path (Get-Location) "dist"
+
+# 从主项目读取版本号
+if (-not $Version)
+{
+    $csproj = [xml](Get-Content -Raw (Join-Path (Get-Location) $Project))
+    $Version = $csproj.Project.PropertyGroup.Version
+    if (-not $Version) { $Version = "0.1.0" }
+}
 
 function New-Directory { param($Path) if (-not (Test-Path $Path)) { New-Item -ItemType Directory -Path $Path -Force | Out-Null } }
 
