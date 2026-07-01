@@ -100,9 +100,6 @@ void RenderStatus()
     var entries = statuses.Values.ToArray();
     if (entries.Length == 0) { prevStatusLines = 0; return; }
 
-    if (statusOriginRow < 0)
-        statusOriginRow = Console.CursorTop;
-
     var width = Console.WindowWidth - 1;
     if (width < 20) width = 79;
     var hasError = errorLog.ErrorCount > 0;
@@ -111,33 +108,49 @@ void RenderStatus()
     Monitor.Enter(consoleLock);
     try
     {
-        // 1) 用空白行覆盖整个旧区域，彻底消除残影
-        Console.SetCursorPosition(0, statusOriginRow);
-        var maxPrev = Math.Max(prevStatusLines, newLineCount);
-        for (var i = 0; i < maxPrev; i++)
-            Console.Write(new string(' ', width) + "\n");
+        if (statusOriginRow < 0)
+        {
+            statusOriginRow = Console.CursorTop;
+        }
+        else
+        {
+            var top = Console.CursorTop;
+            if (top != statusOriginRow + prevStatusLines)
+                statusOriginRow = Math.Max(0, top - prevStatusLines);
+        }
 
-        // 2) 回起始位置写入当前状态
-        Console.SetCursorPosition(0, statusOriginRow);
+        // 用空白覆盖旧区域（不用 \n，避免滚动导致残影）
+        var maxCover = Math.Max(prevStatusLines, newLineCount);
+        for (var i = 0; i < maxCover; i++)
+        {
+            Console.SetCursorPosition(0, statusOriginRow + i);
+            Console.Write(new string(' ', width));
+        }
+
+        // 写当前状态
         var now = DateTime.Now;
         var ts = $"[{now:HH:mm:ss}]";
 
-        foreach (var s in entries)
+        for (var i = 0; i < entries.Length; i++)
         {
+            Console.SetCursorPosition(0, statusOriginRow + i);
+            var s = entries[i];
             var detail = !string.IsNullOrEmpty(s.Detail) ? $" ({s.Detail})" : "";
             var size = s.BytesDownloaded > 0 ? $" {FormatSize(s.BytesDownloaded)}" : "";
             var speed = !string.IsNullOrEmpty(s.SpeedFormatted) ? $" @ {s.SpeedFormatted}" : "";
             var line = $"{ts} {s.Name}: {s.State}{detail}{size}{speed}";
             if (line.Length > width) line = line[..width];
-            Console.Write(line.PadRight(width) + "\n");
+            Console.Write(line.PadRight(width));
         }
 
         if (hasError)
         {
+            Console.SetCursorPosition(0, statusOriginRow + entries.Length);
             var errLine = $"{new string(' ', 4)}⚠ {errorLog.ErrorCount} 个错误，详情见 {Path.GetFileName(errorLogPath)}";
-            Console.Write(errLine.PadRight(width) + "\n");
+            Console.Write(errLine.PadRight(width));
         }
 
+        Console.SetCursorPosition(0, statusOriginRow + newLineCount);
         prevStatusLines = newLineCount;
     }
     finally
