@@ -1,0 +1,126 @@
+name: Build & Release
+
+on:
+  push:
+    branches: [develop, main]
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      src: ${{ steps.filter.outputs.src }}
+      unique: ${{ steps.check-unique.outputs.unique }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check if unique to this branch
+        id: check-unique
+        shell: pwsh
+        run: |
+          if ('${{ github.ref }}' -eq 'refs/heads/main')
+          {
+            echo "unique=true" >> $env:GITHUB_OUTPUT
+          }
+          else
+          {
+            git fetch origin +refs/heads/main:refs/remotes/origin/main
+            if (git merge-base --is-ancestor HEAD origin/main 2>$null)
+            {
+              echo "unique=false" >> $env:GITHUB_OUTPUT
+            }
+            else
+            {
+              echo "unique=true" >> $env:GITHUB_OUTPUT
+            }
+          }
+
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            src:
+              - '**.cs'
+              - '**.csproj'
+              - '**.props'
+              - '**.slnx'
+              - '**.js'
+              - 'build-release.ps1'
+
+  build:
+    needs: changes
+    # 两条分支均要求源码变更才构建；develop 额外要求提交在 main 上唯一
+    if: needs.changes.outputs.src == 'true' && needs.changes.outputs.unique == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      package-names: ${{ steps.list.outputs.names }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Build all packages
+        shell: pwsh
+        run: ./build-release.ps1
+
+      - name: Upload all (intermediate)
+        uses: actions/upload-artifact@v4
+        with:
+          name: all-packages
+          path: dist/
+
+      - name: List package names
+        id: list
+        shell: pwsh
+        run: |
+          $files = Get-ChildItem dist | ForEach-Object { $_.Name }
+          $json = $files | ConvertTo-Json -Compress
+          echo "names=$json" >> $env:GITHUB_OUTPUT
+
+  upload:
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        pkg: ${{ fromJson(needs.build.outputs.package-names) }}
+      max-parallel: 4
+    steps:
+      - name: Download all packages
+        uses: actions/download-artifact@v4
+        with:
+          name: all-packages
+
+      - name: Upload ${{ matrix.pkg }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.pkg }}
+          path: ${{ matrix.pkg }}
+          if-no-files-found: error
+
+  release:
+    if: github.ref == 'refs/heads/main'
+    needs: upload
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download all individual artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: packages
+
+      - name: Create draft release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v0.1.0
+          draft: true
+          generate_release_notes: true
+          files: packages/*/*

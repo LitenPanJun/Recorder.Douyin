@@ -5,6 +5,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <RootNamespace>DouyinDanmaku</RootNamespace>
+    <Version>1.0.1</Version>
+    <FileVersion>1.0.1</FileVersion>
   </PropertyGroup>
 
   <ItemGroup>
@@ -18,7 +20,6 @@
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Services\mssdk.js" />
-    <EmbeddedResource Include="Services\abogus.js" />
   </ItemGroup>
 
 </Project>

@@ -6,8 +6,6 @@ public static class SegmentMerger
 {
     private static string? FfmpegPath => HevcEncodingService.FfmpegExecutablePath;
 
-    public static bool CanMerge => FfmpegPath != null;
-
     public static async Task<string> MergeAsync(
         List<string> segmentFiles,
         string outputPath,

@@ -4,6 +4,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <RootNamespace>Downloader.Douyin</RootNamespace>
+    <Version>1.0.1</Version>
+    <FileVersion>1.0.1</FileVersion>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\Recorder.Shared\Recorder.Shared.csproj" />
