@@ -44,7 +44,7 @@ public class HevcEncodingService
         outputFile ??= Path.ChangeExtension(inputFile, ".mkv");
 
         var args = $"-i \"{inputFile}\" " +
-                   $"-map 0:v:0 -map 0:a:0 " +
+                   $"-map 0:v:0? -map 0:a:0? " +
                    $"-c:v libx265 " +
                    $"-crf {crf} " +
                    $"-preset medium " +
