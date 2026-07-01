@@ -46,6 +46,7 @@ git add -A && git commit -m "refactor(stream): 提取重复的 HTTP 工具方法
 - `main` 分支禁止直接提交，仅接受 Pull Request 合并
 - 所有功能开发从 `develop` 切出 `feature/<英文名称>` 分支
 - 分支名使用英文小写 + 连字符，如 `feature/danmaku-integration`
+- **先切分支，再改代码**：必须先 `git checkout -b <type>/<name> develop` 切换到新分支，然后才能修改任何文件。禁止在 `develop`（或 `main`）上直接修改代码再事后补建分支。
 
 ### 3. 规范的 Commit Message 格式
 
