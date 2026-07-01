@@ -611,6 +611,9 @@ public class ApiService
 
         if (string.IsNullOrEmpty(json))
         {
+            if (resp.Contains("验证码") || resp.Contains("captcha", StringComparison.OrdinalIgnoreCase))
+                throw new CaptchaRequiredException($"https://live.douyin.com/{webRid}");
+
             var snippet = resp.Length > 200 ? resp[..200] + "..." : resp;
             throw new Exception($"无法从HTML解析直播间数据 (cookie={headCookie?.Length ?? 0}chars, resp={resp.Length}chars, 前200={snippet})");
         }
