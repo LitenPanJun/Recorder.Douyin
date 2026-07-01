@@ -170,6 +170,17 @@ public class DouyinDanmakuClient : IDisposable
         }
     }
 
+    private static readonly HashSet<string> IgnoredMethods =
+    [
+        "WebcastRoomStatsMessage",
+        "WebcastResidentGuestMessage",
+        "WebcastLowPcuGuideMessage",
+        "WebcastLowPcuGuideChatMessage",
+        "WebcastInRoomBannerMessage",
+        "WebcastRoomRankMessage",
+        "WebcastRoomCommentTopicMessage",
+    ];
+
     private void DispatchMessage(Message msg)
     {
         switch (msg.Method)
@@ -193,12 +204,13 @@ public class DouyinDanmakuClient : IDisposable
                 HandleSocialMessage(msg.Payload);
                 break;
             default:
-                if (msg.Method.StartsWith("Webcast", StringComparison.Ordinal))
+                if (msg.Method.StartsWith("Webcast", StringComparison.Ordinal) &&
+                    !IgnoredMethods.Contains(msg.Method))
                 {
                     var unknown = new LiveMessage
                     {
                         Type = LiveMessageType.Unknown,
-                        Content = $"[{msg.Method}] (未处理的消息类型, {msg.Payload.Length} bytes)",
+                        Content = $"[{msg.Method}] (未处理, {msg.Payload.Length} bytes)",
                     };
                     OnMessage?.Invoke(unknown);
                 }
