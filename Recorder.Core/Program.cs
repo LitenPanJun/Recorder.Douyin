@@ -79,31 +79,56 @@ Console.CancelKeyPress += (_, args) =>
 
 #endregion
 
-#region 状态渲染 (每 2 秒)
+#region 状态渲染 (每 2 秒固定行刷新)
 
-var statusTimer = new Timer(_ =>
+var statusOriginRow = -1;
+var prevTotalLines = 0;
+
+void RenderStatus()
 {
-    try
-    {
-        var entries = statuses.Values.ToArray();
-        if (entries.Length == 0) return;
+    var entries = statuses.Values.ToArray();
+    if (entries.Length == 0) return;
 
-        var now = DateTime.Now;
-        Console.Write($"\r[{now:HH:mm:ss}] ");
-        for (var i = 0; i < entries.Length; i++)
-        {
-            var s = entries[i];
-            if (i > 0) Console.Write(" | ");
-            var state = s.State;
-            var detail = !string.IsNullOrEmpty(s.Detail) ? $" ({s.Detail})" : "";
-            var size = s.BytesDownloaded > 0 ? $" {FormatSize(s.BytesDownloaded)}" : "";
-            var speed = !string.IsNullOrEmpty(s.SpeedFormatted) ? $" @ {s.SpeedFormatted}" : "";
-            Console.Write($"{s.Name}: {state}{detail}{size}{speed}");
-        }
-        Console.Write(new string(' ', Math.Max(0, Console.WindowWidth - Console.CursorLeft - 1)));
+    var totalLines = entries.Length * 2;
+    var width = Console.WindowWidth - 1;
+    if (width < 20) width = 79;
+
+    if (statusOriginRow < 0)
+        statusOriginRow = Console.CursorTop;
+
+    if (Console.CursorTop > statusOriginRow + totalLines)
+        statusOriginRow = Console.CursorTop - totalLines;
+
+    statusOriginRow = Math.Clamp(statusOriginRow, 0, Math.Max(0, Console.BufferHeight - totalLines));
+
+    Console.SetCursorPosition(0, statusOriginRow);
+
+    var now = DateTime.Now;
+    var ts = $"[{now:HH:mm:ss}]";
+
+    foreach (var s in entries)
+    {
+        var detail = !string.IsNullOrEmpty(s.Detail) ? $" ({s.Detail})" : "";
+        var size = s.BytesDownloaded > 0 ? $" {FormatSize(s.BytesDownloaded)}" : "";
+        var speed = !string.IsNullOrEmpty(s.SpeedFormatted) ? $" @ {s.SpeedFormatted}" : "";
+        var line1 = $"{ts} {s.Name}: {s.State}{detail}{size}{speed}";
+        if (line1.Length > width) line1 = line1[..width];
+        Console.Write(line1.PadRight(width) + "\n");
+
+        var isEncoding = s.State == "编码中" && !string.IsNullOrEmpty(s.Detail);
+        var line2 = isEncoding ? $"{ts} {s.Name} 编码: {s.Detail}" : "";
+        if (line2.Length > width) line2 = line2[..width];
+        Console.Write(line2.PadRight(width) + "\n");
     }
-    catch { }
-}, null, 2000, 2000);
+
+    // 主播减少时擦除旧行残影
+    for (var i = totalLines; i < prevTotalLines; i++)
+        Console.Write("".PadRight(width) + "\n");
+
+    prevTotalLines = totalLines;
+}
+
+var statusTimer = new Timer(_ => { try { RenderStatus(); } catch { } }, null, 2000, 2000);
 
 #endregion
 

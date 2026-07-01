@@ -66,8 +66,6 @@ public class StreamDownloader
                                 CurrentSegment = $"[{index}] HEVC 编码中...",
                                 SegmentsCompleted = index
                             });
-                            Console.Error.WriteLine(
-                                $"[编码] 排队中: 分段 {index}");
 
                             var fi = new FileInfo(flvPath);
                             if (!fi.Exists || fi.Length < 1024)
@@ -97,9 +95,6 @@ public class StreamDownloader
                             sw.Stop();
 
                             File.Delete(flvPath);
-
-                            Console.Error.WriteLine(
-                                $"[编码] 分段 {index}: 完成 ✓ ({sw.Elapsed.TotalMinutes:F1}分)");
 
                             progress?.Report(new DownloadProgress
                             {
