@@ -607,7 +607,10 @@ public class ApiService
         var json = match.Success ? match.Groups[0].Value : "";
 
         if (string.IsNullOrEmpty(json))
-            throw new Exception("无法从HTML解析直播间数据");
+        {
+            var snippet = resp.Length > 200 ? resp[..200] + "..." : resp;
+            throw new Exception($"无法从HTML解析直播间数据 (cookie={headCookie?.Length ?? 0}chars, resp={resp.Length}chars, 前200={snippet})");
+        }
 
         json = json.Trim().Replace("\\\"", "\"").Replace("\\\\", "\\").Replace("]\\n", "");
         return JObject.Parse(json)["state"] ?? throw new Exception("状态数据为空");

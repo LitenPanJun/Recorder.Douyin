@@ -84,7 +84,10 @@ public class StreamerRecorder
             if (msg.Contains("搜索无结果") || msg.Contains("当前未开播") || msg.Contains("未找到"))
                 SetStatus("等待中", "未开播");
             else
+            {
+                Log.Error(ex);
                 SetStatus("错误", msg);
+            }
             return null;
         }
     }
