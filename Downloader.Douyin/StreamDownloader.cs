@@ -55,10 +55,9 @@ public class StreamDownloader
 
                     var task = Task.Run(async () =>
                     {
-                        var encodeCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
                         try
                         {
-                            await _encodeThrottle.WaitAsync(encodeCts.Token);
+                            await _encodeThrottle.WaitAsync(ct);
 
                             var mkvPath = Path.ChangeExtension(flvPath, ".mkv");
 
@@ -81,7 +80,7 @@ public class StreamDownloader
                             using (var fs = new FileStream(flvPath, FileMode.Open, FileAccess.Read, FileShare.Read))
                             {
                                 var sig = new byte[3];
-                                if (await fs.ReadAsync(sig, 0, 3, encodeCts.Token) != 3 ||
+                                if (await fs.ReadAsync(sig, 0, 3, CancellationToken.None) != 3 ||
                                     sig[0] != 'F' || sig[1] != 'L' || sig[2] != 'V')
                                 {
                                     Console.Error.WriteLine(
@@ -94,8 +93,7 @@ public class StreamDownloader
                             var sw = Stopwatch.StartNew();
                             await _hevcEncoder.EncodeAsync(
                                 flvPath, mkvPath, hevcCrf,
-                                progress: null,
-                                ct: encodeCts.Token);
+                                ct: CancellationToken.None);
                             sw.Stop();
 
                             File.Delete(flvPath);
@@ -110,7 +108,7 @@ public class StreamDownloader
                             });
                             Interlocked.Increment(ref encodeOk);
                         }
-                        catch (OperationCanceledException)
+                        catch (OperationCanceledException) when (ct.IsCancellationRequested)
                         {
                             Console.Error.WriteLine($"[编码] 分段 {index}: 已取消");
                             Interlocked.Increment(ref encodeCancel);
@@ -129,7 +127,6 @@ public class StreamDownloader
                         finally
                         {
                             _encodeThrottle.Release();
-                            encodeCts.Dispose();
                         }
                     });
 
