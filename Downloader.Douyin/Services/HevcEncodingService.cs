@@ -52,8 +52,6 @@ public class HevcEncodingService
                    $"-c:a copy " +
                    $"-y \"{outputFile}\"";
 
-        Console.Error.WriteLine($"[ffmpeg] Encoding: {Path.GetFileName(inputFile)} -> {Path.GetFileName(outputFile)}");
-
         var startInfo = new ProcessStartInfo
         {
             FileName = FfmpegPath,
@@ -138,8 +136,6 @@ public class HevcEncodingService
                 $"ffmpeg encode failed (exit {process.ExitCode})\n{stderr}");
         }
 
-        var outSize = new FileInfo(outputFile).Length;
-        Console.Error.WriteLine($"[ffmpeg] Done: {Path.GetFileName(outputFile)} ({outSize / 1024.0 / 1024:F1} MB)");
         progress?.Report(100);
     }
 

@@ -96,9 +96,7 @@ void RenderStatus()
     if (statusOriginRow < 0)
         statusOriginRow = Console.CursorTop;
 
-    if (Console.CursorTop > statusOriginRow + totalLines)
-        statusOriginRow = Console.CursorTop - totalLines;
-
+    // 固定 origin 不跟随日志下移，确保状态块始终在相同行刷新
     statusOriginRow = Math.Clamp(statusOriginRow, 0, Math.Max(0, Console.BufferHeight - totalLines));
 
     Console.SetCursorPosition(0, statusOriginRow);
