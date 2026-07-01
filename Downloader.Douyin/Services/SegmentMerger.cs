@@ -109,7 +109,15 @@ public static class SegmentMerger
             await process.WaitForExitAsync(ct);
 
             if (process.ExitCode != 0)
+            {
+                if (ext == ".flv")
+                {
+                    Console.Error.WriteLine(
+                        "[合并警告] ffmpeg concat 失败，回退到二进制拼接...");
+                    return MergeFlvBinary(segmentFiles, outputPath);
+                }
                 throw new Exception($"ffmpeg merge failed (exit code {process.ExitCode})");
+            }
 
             progress?.Report(100);
         }
