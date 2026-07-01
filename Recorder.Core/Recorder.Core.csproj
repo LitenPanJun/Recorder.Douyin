@@ -6,6 +6,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AssemblyName>Recorder.Douyin</AssemblyName>
+    <Version>0.1.0</Version>
+    <FileVersion>0.1.0</FileVersion>
   </PropertyGroup>
 
   <ItemGroup>
