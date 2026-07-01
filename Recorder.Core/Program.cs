@@ -247,17 +247,20 @@ configWatcher.Dispose();
 Console.Write("\n正在等待录制任务结束...\n");
 
 // 停止所有下载并等待编码+合并完成
-var tasks = runningTasks.Values.ToArray();
 foreach (var r in activeTasks.Values)
     r.Stop();
 
-if (tasks.Length > 0)
+var tasks = runningTasks.Values.ToArray();
+var recorderTasks = activeTasks.Values.Select(r => r.WaitForCompletionAsync()).ToArray();
+var allTasks = tasks.Concat(recorderTasks).ToArray();
+
+if (allTasks.Length > 0)
 {
     var waitCts = new CancellationTokenSource();
     waitCts.CancelAfter(TimeSpan.FromMinutes(10));
     try
     {
-        await Task.WhenAll(tasks).WaitAsync(waitCts.Token);
+        await Task.WhenAll(allTasks).WaitAsync(waitCts.Token);
     }
     catch (TimeoutException)
     {

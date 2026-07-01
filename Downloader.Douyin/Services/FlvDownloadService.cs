@@ -249,6 +249,18 @@ public class FlvDownloadService
                         var boundary = FindLastTagBoundary(scanBuf, 0, scanBytes);
                         if (boundary >= 13 && boundary < scanBytes)
                             currentSegment.SetLength(fileLen - (scanBytes - boundary));
+                        else if (boundary < 0 && fileLen > 1048576)
+                        {
+                            // 256KB 内找不到边界（大帧跨段），扩大为 1MB 再试
+                            var scanBytes2 = (int)Math.Min(fileLen, 1048576);
+                            var scanBuf2 = new byte[scanBytes2];
+                            currentSegment.Seek(-scanBytes2, SeekOrigin.End);
+                            _ = await currentSegment.ReadAsync(
+                                scanBuf2, 0, scanBytes2, CancellationToken.None);
+                            boundary = FindLastTagBoundary(scanBuf2, 0, scanBytes2);
+                            if (boundary >= 13 && boundary < scanBytes2)
+                                currentSegment.SetLength(fileLen - (scanBytes2 - boundary));
+                        }
                     }
 
                     await currentSegment.DisposeAsync();

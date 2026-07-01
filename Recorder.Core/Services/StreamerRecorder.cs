@@ -28,8 +28,10 @@ public class StreamerRecorder
         TimeSpan.FromMinutes(Math.Max(_config.SegmentDuration ?? _defaults.SegmentDuration, 0.1));
 
     private volatile bool _isRecording;
+    private Task? _recordingTask;
 
     public bool IsRecording => _isRecording;
+    public Task? RecordingTask => _recordingTask;
 
     public StreamerStatus Status { get; } = new()
     {
@@ -120,7 +122,16 @@ public class StreamerRecorder
     {
         if (_stopRequested || _isRecording) return;
         _isRecording = true;
-        _ = RecordAndFinishAsync(detail);
+        _recordingTask = RecordAndFinishAsync(detail);
+    }
+
+    public async Task WaitForCompletionAsync()
+    {
+        if (_recordingTask != null)
+        {
+            try { await _recordingTask; }
+            catch { }
+        }
     }
 
     private async Task RecordAndFinishAsync(LiveRoomDetail detail)
