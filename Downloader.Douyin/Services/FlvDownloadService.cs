@@ -111,13 +111,33 @@ public class FlvDownloadService
                                 { p++; continue; }
                                 var ds = (initBuf[p + 1] << 16) |
                                          (initBuf[p + 2] << 8) | initBuf[p + 3];
-                                var prevPos = p + 11 + ds;
-                                if (prevPos + 4 > initRead) break;
-                                var prevSize = (initBuf[prevPos] << 24) |
-                                               (initBuf[prevPos + 1] << 16) |
-                                               (initBuf[prevPos + 2] << 8) |
-                                               initBuf[prevPos + 3];
+                                var tagEnd = p + 11 + ds;
+                                if (tagEnd + 4 > initRead) break;
+                                var prevSize = (initBuf[tagEnd] << 24) |
+                                               (initBuf[tagEnd + 1] << 16) |
+                                               (initBuf[tagEnd + 2] << 8) |
+                                               initBuf[tagEnd + 3];
                                 if (prevSize != 11 + ds) { p++; continue; }
+
+                                // 双校验：确认下一个 tag 同样有效，排除假阳性
+                                var nextP = tagEnd + 4;
+                                if (nextP + 15 <= initRead)
+                                {
+                                    var nt = initBuf[nextP];
+                                    if (nt != 8 && nt != 9 && nt != 18) { p++; continue; }
+                                    if (initBuf[nextP + 8] != 0 || initBuf[nextP + 9] != 0 || initBuf[nextP + 10] != 0)
+                                    { p++; continue; }
+                                    var nds = (initBuf[nextP + 1] << 16) |
+                                              (initBuf[nextP + 2] << 8) | initBuf[nextP + 3];
+                                    var nextEnd = nextP + 11 + nds;
+                                    if (nextEnd + 4 > initRead) break;
+                                    var nps = (initBuf[nextEnd] << 24) |
+                                              (initBuf[nextEnd + 1] << 16) |
+                                              (initBuf[nextEnd + 2] << 8) |
+                                              initBuf[nextEnd + 3];
+                                    if (nps != 11 + nds) { p++; continue; }
+                                }
+
                                 firstTagStart = p;
                                 break;
                             }
@@ -399,11 +419,11 @@ public class FlvDownloadService
 
     /// <summary>扫描 buffer 找到第一个完整的 onMetaData 脚本标签（type 18），
     /// 返回该标签末尾（含 PreviousTagSize）的偏移。未找到返回 0。
-    /// 通过 PreviousTagSize 校验防止误判。</summary>
+    /// 通过 PreviousTagSize + 下一 tag 双校验防止误判。</summary>
     private static int SkipMetadataTag(byte[] buffer, int length)
     {
         var pos = 0;
-        while (pos + 11 <= length)
+        while (pos + 15 <= length)
         {
             var tagType = buffer[pos];
             if (tagType != 8 && tagType != 9 && tagType != 18) { pos++; continue; }
@@ -417,6 +437,22 @@ public class FlvDownloadService
             var prevSize = (buffer[tagEnd] << 24) | (buffer[tagEnd + 1] << 16) |
                            (buffer[tagEnd + 2] << 8) | buffer[tagEnd + 3];
             if (prevSize != 11 + dataSize) { pos++; continue; }
+
+            // 双校验：下一个 tag 必须也合法
+            var nextP = tagEnd + 4;
+            if (nextP + 15 <= length)
+            {
+                var nt = buffer[nextP];
+                if (nt != 8 && nt != 9 && nt != 18) { pos++; continue; }
+                if (buffer[nextP + 8] != 0 || buffer[nextP + 9] != 0 || buffer[nextP + 10] != 0)
+                { pos++; continue; }
+                var nds = (buffer[nextP + 1] << 16) | (buffer[nextP + 2] << 8) | buffer[nextP + 3];
+                var nEnd = nextP + 11 + nds;
+                if (nEnd + 4 > length) break;
+                var nps = (buffer[nEnd] << 24) | (buffer[nEnd + 1] << 16) |
+                          (buffer[nEnd + 2] << 8) | buffer[nEnd + 3];
+                if (nps != 11 + nds) { pos++; continue; }
+            }
 
             if (tagType == 18) return tagEnd + 4;
             pos = tagEnd + 4;
