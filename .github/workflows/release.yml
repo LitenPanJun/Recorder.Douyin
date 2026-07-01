@@ -4,13 +4,41 @@ on:
   push:
     branches: [develop, main]
 
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   changes:
     runs-on: ubuntu-latest
     outputs:
       src: ${{ steps.filter.outputs.src }}
+      unique: ${{ steps.check-unique.outputs.unique }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check if unique to this branch
+        id: check-unique
+        shell: pwsh
+        run: |
+          if ('${{ github.ref }}' -eq 'refs/heads/main')
+          {
+            echo "unique=true" >> $env:GITHUB_OUTPUT
+          }
+          else
+          {
+            git fetch origin main --depth=1
+            if (git merge-base --is-ancestor HEAD origin/main 2>$null)
+            {
+              echo "unique=false" >> $env:GITHUB_OUTPUT
+            }
+            else
+            {
+              echo "unique=true" >> $env:GITHUB_OUTPUT
+            }
+          }
 
       - uses: dorny/paths-filter@v3
         id: filter
@@ -26,8 +54,8 @@ jobs:
 
   build:
     needs: changes
-    # main 始终构建；develop 仅在有源码变更时构建
-    if: github.ref == 'refs/heads/main' || needs.changes.outputs.src == 'true'
+    # main 始终构建；develop 仅在有源码变更且提交唯一时才构建
+    if: needs.changes.outputs.unique == 'true' && (github.ref == 'refs/heads/main' || needs.changes.outputs.src == 'true')
     runs-on: ubuntu-latest
     outputs:
       package-names: ${{ steps.list.outputs.names }}
@@ -58,8 +86,7 @@ jobs:
           echo "names=$json" >> $env:GITHUB_OUTPUT
 
   upload:
-    needs: [changes, build]
-    if: github.ref == 'refs/heads/main' || needs.changes.outputs.src == 'true'
+    needs: build
     runs-on: ubuntu-latest
     strategy:
       matrix:
