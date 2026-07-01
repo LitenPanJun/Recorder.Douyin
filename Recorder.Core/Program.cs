@@ -180,8 +180,6 @@ void StartStreamer(StreamerConfig sc)
         statuses[status.Id] = status;
     };
     activeTasks[sc.Id] = recorder;
-    var runTask = Task.Run(() => recorder.RunAsync(), CancellationToken.None);
-    runningTasks[sc.Id] = runTask;
 }
 
 void StopStreamer(string id)
@@ -212,6 +210,11 @@ configWatcher.ConfigChanged += cfg =>
 
 // 初始启动
 SyncStreamers(config);
+
+// 启动集中轮询调度器
+var coordinator = new PollCoordinator(activeTasks, configWatcher);
+var coordinatorTask = Task.Run(() => coordinator.RunAsync(cts.Token), CancellationToken.None);
+runningTasks["__coordinator__"] = coordinatorTask;
 
 #endregion
 

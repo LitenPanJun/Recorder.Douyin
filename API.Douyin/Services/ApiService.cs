@@ -19,6 +19,34 @@ public class ApiService
         _signature = signature;
     }
 
+    public async Task<LiveStatusInfo> GetLiveStatusAsync(string roomId)
+    {
+        try
+        {
+            if (roomId.Length <= 16)
+            {
+                var data = await GetRoomDataByApiAsync(roomId);
+                var roomData = data["data"]?[0];
+                return new LiveStatusInfo
+                {
+                    IsLive = roomData?["status"]?.ToObject<int>() == 2,
+                    Title = roomData?["title"]?.ToString() ?? ""
+                };
+            }
+            var roomJson = await GetRoomDataByRoomIdAsync(roomId);
+            var room = roomJson["data"]?["room"];
+            return new LiveStatusInfo
+            {
+                IsLive = room?["status"]?.ToObject<int>() == 2,
+                Title = room?["title"]?.ToString() ?? ""
+            };
+        }
+        catch
+        {
+            return new LiveStatusInfo();
+        }
+    }
+
     private async Task<Dictionary<string, string>> GetHeadersAsync(string? referer = null)
     {
         var cookie = await _cookieService.GetCookieAsync();

@@ -26,7 +26,9 @@ public class StreamerRecorder
     private TimeSpan SegmentDuration =>
         TimeSpan.FromMinutes(Math.Max(_config.SegmentDuration ?? _defaults.SegmentDuration, 0.1));
 
-    private static readonly TimeSpan RetryDelay = TimeSpan.FromSeconds(60);
+    private volatile bool _isRecording;
+
+    public bool IsRecording => _isRecording;
 
     public StreamerStatus Status { get; } = new()
     {
@@ -49,7 +51,7 @@ public class StreamerRecorder
         _cts = new CancellationTokenSource();
 
         Status.Id = config.Id;
-        Status.Name = !string.IsNullOrEmpty(config.Name) ? config.Name : config.RoomId;
+        Status.Name = !string.IsNullOrEmpty(config.Name) ? config.Name : config.UniqueId;
     }
 
     public void Stop()
@@ -59,54 +61,55 @@ public class StreamerRecorder
         // 不取消 _cts.Token — 让已入队的编码和合并任务继续完成
     }
 
-    public async Task RunAsync()
+    public async Task<LiveRoomDetail?> PollAsync(CancellationToken ct)
     {
-        while (!_cts.Token.IsCancellationRequested && !_stopRequested)
+        SetStatus("解析中");
+        try
         {
-            LiveRoomDetail? detail = null;
-            SetStatus("解析中");
-
-            try
+            var detail = await ResolveRoomAsync(ct);
+            if (detail?.IsLive == true)
             {
-                detail = await ResolveRoomAsync(_cts.Token);
+                SetStatus("等待中", $"开播: {detail.Title}");
+                return detail;
             }
-            catch (OperationCanceledException)
-            {
-                break;
-            }
-            catch (Exception ex)
-            {
-                SetStatus("错误", ex.Message);
-                await DelaySafe(RetryDelay);
-                continue;
-            }
-
-            if (detail?.IsLive != true)
-            {
-                SetStatus("等待中", "未开播");
-                await DelaySafe(RetryDelay);
-                continue;
-            }
-
-            SetStatus("录制中", detail.Title);
-
-            try
-            {
-                await RecordStreamAsync(detail);
-            }
-            catch (OperationCanceledException)
-            {
-                break;
-            }
-            catch (Exception ex)
-            {
-                SetStatus("错误", ex.Message);
-            }
-
-            await DelaySafe(TimeSpan.FromSeconds(10));
+            SetStatus("等待中", "未开播");
+            return null;
         }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex)
+        {
+            var msg = ex.Message;
+            if (msg.Contains("搜索无结果") || msg.Contains("当前未开播") || msg.Contains("未找到"))
+                SetStatus("等待中", "未开播");
+            else
+                SetStatus("错误", msg);
+            return null;
+        }
+    }
 
-        SetStatus("已停止");
+    public void StartRecording(LiveRoomDetail detail)
+    {
+        if (_isRecording) return;
+        _isRecording = true;
+        _ = RecordAndFinishAsync(detail);
+    }
+
+    private async Task RecordAndFinishAsync(LiveRoomDetail detail)
+    {
+        try
+        {
+            SetStatus("录制中", detail.Title);
+            await RecordStreamAsync(detail);
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex)
+        {
+            SetStatus("错误", ex.Message);
+        }
+        finally
+        {
+            _isRecording = false;
+        }
     }
 
     private async Task RecordStreamAsync(LiveRoomDetail detail)
@@ -269,24 +272,32 @@ public class StreamerRecorder
 
     private async Task<LiveRoomDetail?> ResolveRoomAsync(CancellationToken ct)
     {
-        var roomInput = _config.RoomId;
-        if (string.IsNullOrEmpty(roomInput)) return null;
+        // 有 roomId → 直播状态接口判定 + 房间API获取全量数据
+        if (!string.IsNullOrEmpty(_config.RoomId))
+        {
+            ct.ThrowIfCancellationRequested();
+            try
+            {
+                var status = await _liveClient.GetLiveStatusAsync(_config.RoomId);
+                if (status.IsLive)
+                    return await _liveClient.GetRoomDetailAsync(_config.RoomId);
+            }
+            catch { }
 
+            return await _liveClient.GetRoomDetailAsync(_config.RoomId);
+        }
+
+        // 无 roomId → 走抖音号解析流程
+        if (string.IsNullOrEmpty(_config.UniqueId)) return null;
         ct.ThrowIfCancellationRequested();
-
-        if (roomInput.All(char.IsDigit) && roomInput.Length > 16)
-            return await _liveClient.GetRoomDetailAsync(roomInput);
-
-        return await _liveClient.GetRoomDetailByUserUniqueIdAsync(roomInput);
+        return await _liveClient.GetRoomDetailByUserUniqueIdAsync(_config.UniqueId);
     }
 
-    private async Task DelaySafe(TimeSpan delay)
+    public void SetRoomId(string roomId)
     {
-        try
-        {
-            await Task.Delay(delay, _cts.Token);
-        }
-        catch (OperationCanceledException) { }
+        if (string.IsNullOrEmpty(roomId) || roomId.Length <= 16 || !roomId.All(char.IsDigit))
+            return;
+        _config.RoomId = roomId;
     }
 
     private void SetStatus(string state, string detail = "")
