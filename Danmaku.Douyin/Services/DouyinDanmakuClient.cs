@@ -192,6 +192,17 @@ public class DouyinDanmakuClient : IDisposable
             case "WebcastSocialMessage":
                 HandleSocialMessage(msg.Payload);
                 break;
+            default:
+                if (msg.Method.StartsWith("Webcast", StringComparison.Ordinal))
+                {
+                    var unknown = new LiveMessage
+                    {
+                        Type = LiveMessageType.Unknown,
+                        Content = $"[{msg.Method}] (未处理的消息类型, {msg.Payload.Length} bytes)",
+                    };
+                    OnMessage?.Invoke(unknown);
+                }
+                break;
         }
     }
 
