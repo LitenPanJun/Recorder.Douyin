@@ -100,20 +100,27 @@ void RenderStatus()
     var entries = statuses.Values.ToArray();
     if (entries.Length == 0) { prevStatusLines = 0; return; }
 
-    var totalLines = entries.Length;
-
     if (statusOriginRow < 0)
         statusOriginRow = Console.CursorTop;
 
-    // 主播数减少时擦除残影；增加时自然覆盖
+    var width = Console.WindowWidth - 1;
+    if (width < 20) width = 79;
+    var hasError = errorLog.ErrorCount > 0;
+    var newLineCount = entries.Length + (hasError ? 1 : 0);
+
     Monitor.Enter(consoleLock);
     try
     {
+        // 1) 用空白行覆盖整个旧区域，彻底消除残影
+        Console.SetCursorPosition(0, statusOriginRow);
+        var maxPrev = Math.Max(prevStatusLines, newLineCount);
+        for (var i = 0; i < maxPrev; i++)
+            Console.Write(new string(' ', width) + "\n");
+
+        // 2) 回起始位置写入当前状态
         Console.SetCursorPosition(0, statusOriginRow);
         var now = DateTime.Now;
         var ts = $"[{now:HH:mm:ss}]";
-        var width = Console.WindowWidth - 1;
-        if (width < 20) width = 79;
 
         foreach (var s in entries)
         {
@@ -125,18 +132,13 @@ void RenderStatus()
             Console.Write(line.PadRight(width) + "\n");
         }
 
-        // 错误计数提示
-        var ec = errorLog.ErrorCount;
-        var errLine = ec > 0
-            ? $"{new string(' ', 4)}⚠ {ec} 个错误，详情见 {errorLogPath}".PadRight(width)
-            : "";
-        Console.Write(errLine + "\n");
+        if (hasError)
+        {
+            var errLine = $"{new string(' ', 4)}⚠ {errorLog.ErrorCount} 个错误，详情见 {Path.GetFileName(errorLogPath)}";
+            Console.Write(errLine.PadRight(width) + "\n");
+        }
 
-        // 主播减少时擦除旧行
-        for (var i = totalLines + 1; i < prevStatusLines; i++)
-            Console.Write("".PadRight(width) + "\n");
-
-        prevStatusLines = totalLines + (errorLog.ErrorCount > 0 ? 1 : 0);
+        prevStatusLines = newLineCount;
     }
     finally
     {
