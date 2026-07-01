@@ -92,7 +92,29 @@ public class FlvDownloadService
                             initBuf.AsMemory(0, initBuf.Length), token);
                         if (initRead > 0)
                         {
-                            await currentSegment.WriteAsync(initBuf, 0, initRead, token);
+                            int firstTagStart = -1;
+                            var p = 0;
+                            while (p + 15 <= initRead)
+                            {
+                                var t = initBuf[p];
+                                if (t != 8 && t != 9 && t != 18) { p++; continue; }
+                                if (initBuf[p + 8] != 0 || initBuf[p + 9] != 0 || initBuf[p + 10] != 0)
+                                { p++; continue; }
+                                var ds = (initBuf[p + 1] << 16) |
+                                         (initBuf[p + 2] << 8) | initBuf[p + 3];
+                                var prevPos = p + 11 + ds;
+                                if (prevPos + 4 > initRead) break;
+                                var prevSize = (initBuf[prevPos] << 24) |
+                                               (initBuf[prevPos + 1] << 16) |
+                                               (initBuf[prevPos + 2] << 8) |
+                                               initBuf[prevPos + 3];
+                                if (prevSize != 11 + ds) { p++; continue; }
+                                firstTagStart = p;
+                                break;
+                            }
+                            var writeFrom = firstTagStart >= 0 ? firstTagStart : 0;
+                            await currentSegment.WriteAsync(
+                                initBuf, writeFrom, initRead - writeFrom, token);
                         }
                     }
                 }
