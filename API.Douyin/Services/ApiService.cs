@@ -594,6 +594,9 @@ public class ApiService
             ["Authority"] = Authority
         });
 
+        if (string.IsNullOrEmpty(headCookie))
+            headCookie = await _cookieService.GetCookieAsync();
+
         var resp = await HttpUtils.GetStringAsync($"https://live.douyin.com/{webRid}", new()
         {
             ["User-Agent"] = _signature.GetUserAgent(),
