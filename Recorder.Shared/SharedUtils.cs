@@ -22,4 +22,15 @@ public static class SharedUtils
             result[i] = chars[data[i] % chars.Length];
         return new string(result);
     }
+
+    public static string FormatSize(long bytes)
+    {
+        if (bytes >= 1024L * 1024 * 1024)
+            return $"{bytes / (1024.0 * 1024 * 1024):F2} GB";
+        if (bytes >= 1024 * 1024)
+            return $"{bytes / (1024.0 * 1024):F1} MB";
+        if (bytes >= 1024)
+            return $"{bytes / 1024.0:F1} KB";
+        return $"{bytes} B";
+    }
 }

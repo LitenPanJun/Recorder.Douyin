@@ -23,6 +23,7 @@ public class FlvDownloadService
         IProgress<DownloadProgress>? progress = null,
         CancellationToken ct = default)
     {
+        _cancelCts?.Dispose();
         _cancelCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         var token = _cancelCts.Token;
 
@@ -130,7 +131,7 @@ public class FlvDownloadService
                 }
 
                 var bytesRead = await responseStream.ReadAsync(
-                    buffer, 0, buffer.Length, CancellationToken.None);
+                    buffer, 0, buffer.Length, token);
                 if (bytesRead == 0) break;
 
                 var bytesToLog = bytesRead;
@@ -325,7 +326,7 @@ public class FlvDownloadService
             pos += tagLen + 4;
         }
 
-        if (avcHeader == null && (!hasVideo || aacHeader == null))
+        if ((hasVideo && avcHeader == null) || (hasAudio && aacHeader == null))
             return false;
 
         using var ms = new MemoryStream();

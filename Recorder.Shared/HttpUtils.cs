@@ -64,20 +64,6 @@ public static class HttpUtils
         return await response.Content.ReadAsStringAsync();
     }
 
-    public static async Task<Stream> GetStreamAsync(string url, Dictionary<string, string>? headers = null)
-    {
-        using var request = new HttpRequestMessage(HttpMethod.Get, url);
-        if (headers != null)
-        {
-            foreach (var (key, value) in headers)
-                request.Headers.TryAddWithoutValidation(key, value);
-        }
-
-        var response = await Client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
-        response.EnsureSuccessStatusCode();
-        return await response.Content.ReadAsStreamAsync();
-    }
-
     public static async Task<HttpResponseMessage> GetResponseAsync(string url, Dictionary<string, string>? headers = null)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, url);
@@ -88,8 +74,16 @@ public static class HttpUtils
         }
 
         var response = await Client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
-        response.EnsureSuccessStatusCode();
-        return response;
+        try
+        {
+            response.EnsureSuccessStatusCode();
+            return response;
+        }
+        catch
+        {
+            response.Dispose();
+            throw;
+        }
     }
 
     public static HttpClient CreateClient(TimeSpan timeout, DecompressionMethods decompression = DecompressionMethods.GZip | DecompressionMethods.Deflate)
