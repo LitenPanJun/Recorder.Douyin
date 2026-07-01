@@ -63,6 +63,7 @@ public class StreamerRecorder
 
     public async Task<LiveRoomDetail?> PollAsync(CancellationToken ct)
     {
+        if (_stopRequested) return null;
         SetStatus("解析中");
         try
         {
@@ -89,7 +90,7 @@ public class StreamerRecorder
 
     public void StartRecording(LiveRoomDetail detail)
     {
-        if (_isRecording) return;
+        if (_stopRequested || _isRecording) return;
         _isRecording = true;
         _ = RecordAndFinishAsync(detail);
     }

@@ -207,8 +207,8 @@ public class HevcEncodingService
                 if (proc.ExitCode == 0)
                 {
                     var firstLine = proc.StandardOutput.ReadLine() ?? "";
-                    Console.Error.WriteLine($"[ffmpeg] 已找到: {candidate}");
-                    Console.Error.WriteLine($"[ffmpeg] 版本: {firstLine}");
+                    Recorder.Shared.Log.Info($"[ffmpeg] 已找到: {candidate}");
+                    Recorder.Shared.Log.Info($"[ffmpeg] 版本: {firstLine}");
                     return candidate;
                 }
             }
