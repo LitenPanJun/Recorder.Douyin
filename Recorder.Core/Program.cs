@@ -126,6 +126,18 @@ var danmakuCount = 0;
 var downloadCompleted = false;
 var cancelCts = new CancellationTokenSource();
 
+Console.CancelKeyPress += (_, args) =>
+{
+    if (cancelCts.IsCancellationRequested)
+    {
+        Console.Error.WriteLine("\n[强制退出]");
+        Environment.Exit(1);
+    }
+    args.Cancel = true;
+    cancelCts.Cancel();
+    Console.Error.WriteLine("\n[录制] 正在等待当前分段下载完成后停止...");
+};
+
 // 弹幕接收
 var danmakuClient = new DouyinDanmakuClient();
 var danmakuPath = $"{outputBasePath}_Danmaku.txt";
@@ -204,13 +216,11 @@ try
 }
 catch (OperationCanceledException)
 {
-    Console.WriteLine("\n\n[录制] 已取消");
-    return;
+    Console.WriteLine("\n\n[录制] 用户已取消，正在完成转码和合并...");
 }
 catch (Exception ex)
 {
     Console.WriteLine($"\n\n[错误] 推流下载失败: {ex.Message}");
-    return;
 }
 finally
 {
@@ -218,7 +228,13 @@ finally
     await danmakuClient.StopAsync();
 }
 
-Console.WriteLine("\n\n推流下载完成!");
+if (downloadResult == null || downloadResult.SegmentFiles.Count == 0)
+{
+    Console.WriteLine("[录制] 未获取到任何分段，退出");
+    return;
+}
+
+Console.WriteLine("\n推流下载完成!");
 
 #endregion
 
