@@ -4,6 +4,9 @@ namespace API.Douyin.Services;
 
 public class CookieService
 {
+    private static readonly string ValidatedCookiePath =
+        Path.Combine(AppContext.BaseDirectory, "validated_cookie.txt");
+
     private readonly ISignatureProvider _signature;
     private string? _cookie;
 
@@ -14,6 +17,11 @@ public class CookieService
 
     public async Task<string> GetCookieAsync()
     {
+        if (!string.IsNullOrEmpty(_cookie))
+            return _cookie;
+
+        // 优先加载已验证并持久化的 cookie
+        _cookie = LoadValidatedCookie();
         if (!string.IsNullOrEmpty(_cookie))
             return _cookie;
 
@@ -43,5 +51,25 @@ public class CookieService
     public void SetCookie(string cookie)
     {
         _cookie = cookie;
+        try { File.WriteAllText(ValidatedCookiePath, cookie); }
+        catch { }
+    }
+
+    private static string? LoadValidatedCookie()
+    {
+        try
+        {
+            if (File.Exists(ValidatedCookiePath))
+                return File.ReadAllText(ValidatedCookiePath).Trim();
+        }
+        catch { }
+        return null;
+    }
+
+    public void ClearValidatedCookie()
+    {
+        _cookie = null;
+        try { if (File.Exists(ValidatedCookiePath)) File.Delete(ValidatedCookiePath); }
+        catch { }
     }
 }
