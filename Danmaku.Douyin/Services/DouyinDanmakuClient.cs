@@ -170,6 +170,17 @@ public class DouyinDanmakuClient : IDisposable
         }
     }
 
+    private static readonly HashSet<string> IgnoredMethods =
+    [
+        "WebcastRoomStatsMessage",
+        "WebcastResidentGuestMessage",
+        "WebcastLowPcuGuideMessage",
+        "WebcastLowPcuGuideChatMessage",
+        "WebcastInRoomBannerMessage",
+        "WebcastRoomRankMessage",
+        "WebcastRoomCommentTopicMessage",
+    ];
+
     private void DispatchMessage(Message msg)
     {
         switch (msg.Method)
@@ -181,16 +192,31 @@ public class DouyinDanmakuClient : IDisposable
                 HandleRoomUserSeqMessage(msg.Payload);
                 break;
             case "WebcastGiftMessage":
+            case "WebcastGiftSortMessage":
                 HandleGiftMessage(msg.Payload);
                 break;
             case "WebcastMemberMessage":
                 HandleMemberMessage(msg.Payload);
                 break;
             case "WebcastLikeMessage":
+            case "WebcastChatLikeMessage":
                 HandleLikeMessage(msg.Payload);
                 break;
             case "WebcastSocialMessage":
+            case "WebcastFansclubMessage":
                 HandleSocialMessage(msg.Payload);
+                break;
+            default:
+                if (msg.Method.StartsWith("Webcast", StringComparison.Ordinal) &&
+                    !IgnoredMethods.Contains(msg.Method))
+                {
+                    var unknown = new LiveMessage
+                    {
+                        Type = LiveMessageType.Unknown,
+                        Content = $"[{msg.Method}]",
+                    };
+                    OnMessage?.Invoke(unknown);
+                }
                 break;
         }
     }

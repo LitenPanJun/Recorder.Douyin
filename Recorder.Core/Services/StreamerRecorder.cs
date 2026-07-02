@@ -28,8 +28,10 @@ public class StreamerRecorder
         TimeSpan.FromMinutes(Math.Max(_config.SegmentDuration ?? _defaults.SegmentDuration, 0.1));
 
     private volatile bool _isRecording;
+    private Task? _recordingTask;
 
     public bool IsRecording => _isRecording;
+    public Task? RecordingTask => _recordingTask;
 
     public StreamerStatus Status { get; } = new()
     {
@@ -120,7 +122,16 @@ public class StreamerRecorder
     {
         if (_stopRequested || _isRecording) return;
         _isRecording = true;
-        _ = RecordAndFinishAsync(detail);
+        _recordingTask = RecordAndFinishAsync(detail);
+    }
+
+    public async Task WaitForCompletionAsync()
+    {
+        if (_recordingTask != null)
+        {
+            try { await _recordingTask; }
+            catch { }
+        }
     }
 
     private async Task RecordAndFinishAsync(LiveRoomDetail detail)
@@ -190,7 +201,10 @@ public class StreamerRecorder
             Interlocked.Increment(ref danmakuCount);
             var elapsed = recordingStopwatch.Elapsed;
             var tc = $"{(int)elapsed.TotalHours:D2}:{elapsed.Minutes:D2}:{elapsed.Seconds:D2}";
-            var line = $"[{tc}] [{msg.Type}] {msg.UserName}: {msg.Content}";
+            var extra = "";
+            if (msg.Type == LiveMessageType.Gift && msg.Data is GiftInfo gift)
+                extra = $" (💎{gift.DiamondCount} 🔁{gift.ComboCount}) [{gift.Describe}] giftId={gift.GiftId} to={gift.ToUserName}";
+            var line = $"[{tc}] [{msg.Type}] {msg.UserName}: {msg.Content}{extra}";
             try { File.AppendAllText(danmakuPath, line + "\n"); }
             catch { }
         };
