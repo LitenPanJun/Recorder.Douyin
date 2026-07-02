@@ -23,7 +23,7 @@ public static class HttpUtils
         if (headers != null)
         {
             foreach (var (key, value) in headers)
-                request.Headers.TryAddWithoutValidation(key, value);
+                request.Headers.TryAddWithoutValidation(key, SanitizeHeaderValue(value));
         }
 
         using var response = await Client.SendAsync(request);
@@ -37,7 +37,7 @@ public static class HttpUtils
         if (headers != null)
         {
             foreach (var (key, value) in headers)
-                request.Headers.TryAddWithoutValidation(key, value);
+                request.Headers.TryAddWithoutValidation(key, SanitizeHeaderValue(value));
         }
 
         using var response = await Client.SendAsync(request);
@@ -56,7 +56,7 @@ public static class HttpUtils
         if (headers != null)
         {
             foreach (var (key, value) in headers)
-                request.Headers.TryAddWithoutValidation(key, value);
+                request.Headers.TryAddWithoutValidation(key, SanitizeHeaderValue(value));
         }
 
         using var response = await Client.SendAsync(request);
@@ -70,7 +70,7 @@ public static class HttpUtils
         if (headers != null)
         {
             foreach (var (key, value) in headers)
-                request.Headers.TryAddWithoutValidation(key, value);
+                request.Headers.TryAddWithoutValidation(key, SanitizeHeaderValue(value));
         }
 
         var response = await Client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
@@ -84,6 +84,13 @@ public static class HttpUtils
             response.Dispose();
             throw;
         }
+    }
+
+    private static string SanitizeHeaderValue(string value)
+    {
+        return value.Any(c => c > 127)
+            ? new string(value.Where(c => c <= 127).ToArray())
+            : value;
     }
 
     public static HttpClient CreateClient(TimeSpan timeout, DecompressionMethods decompression = DecompressionMethods.GZip | DecompressionMethods.Deflate)
