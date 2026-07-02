@@ -82,6 +82,7 @@ public class StreamerRecorder
         catch (OperationCanceledException) { throw; }
         catch (CaptchaRequiredException cap)
         {
+            _liveClient.ClearValidatedCookie();
             Log.Warn($"[验证码] {cap.Url} 需要人工验证");
             try { Process.Start(new ProcessStartInfo(cap.Url) { UseShellExecute = true }); } catch { }
             Console.WriteLine();

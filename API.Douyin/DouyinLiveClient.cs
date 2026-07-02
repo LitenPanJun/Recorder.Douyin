@@ -45,4 +45,9 @@ public class DouyinLiveClient
     {
         _cookies.SetCookie(cookie);
     }
+
+    public void ClearValidatedCookie()
+    {
+        _cookies.ClearValidatedCookie();
+    }
 }
