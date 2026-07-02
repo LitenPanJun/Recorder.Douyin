@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Recorder.Shared;
 
 namespace Downloader.Douyin.Services;
 
@@ -69,15 +70,13 @@ public static class SegmentMerger
 
             if (ext == ".flv")
             {
-                Console.Error.WriteLine(
-                    "[合并警告] ffmpeg concat 失败，回退到二进制拼接...");
+            Log.Warn("[合并警告] ffmpeg concat 失败，回退到二进制拼接...");
                 return MergeFlvBinary(segmentFiles, outputPath);
             }
 
             if (ext == ".mkv")
             {
-                Console.Error.WriteLine(
-                    "[合并警告] ffmpeg concat 失败，尝试 concat filter 回退...");
+                Log.Warn("[合并警告] ffmpeg concat 失败，尝试 concat filter 回退...");
                 return await MergeMkvConcatFilterAsync(
                     segmentFiles, outputPath, ct);
             }
@@ -173,7 +172,7 @@ public static class SegmentMerger
 
         if (exitCode != 0)
         {
-            Console.Error.WriteLine(
+            Log.Warn(
                 $"[合并警告] MKV filter 回退也失败 (exit {exitCode})");
             var msg = stderr.Length > 300 ? stderr[..300] + "..." : stderr;
             throw new Exception(

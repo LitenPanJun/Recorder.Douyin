@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text;
 using System.Text.RegularExpressions;
+using Recorder.Shared;
 
 namespace Downloader.Douyin.Services;
 
@@ -51,8 +52,6 @@ public class HevcEncodingService
                    $"-tag:v hvc1 " +
                    $"-c:a copy " +
                    $"-y \"{outputFile}\"";
-
-        Console.Error.WriteLine($"[ffmpeg] Encoding: {Path.GetFileName(inputFile)} -> {Path.GetFileName(outputFile)}");
 
         var startInfo = new ProcessStartInfo
         {
@@ -132,14 +131,22 @@ public class HevcEncodingService
         if (process.ExitCode != 0)
         {
             var stderr = stderrBuilder.ToString();
-            Console.Error.WriteLine($"[ffmpeg] Failed (exit code {process.ExitCode}):");
-            Console.Error.WriteLine(stderr.Length > 500 ? stderr[..500] + "..." : stderr);
+            var lines = stderr.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+            var relevant = lines.Where(l =>
+                l.Contains("Error", StringComparison.OrdinalIgnoreCase) ||
+                l.Contains("Invalid", StringComparison.OrdinalIgnoreCase) ||
+                l.Contains("Cannot determine", StringComparison.OrdinalIgnoreCase) ||
+                l.Contains("Packet mismatch", StringComparison.OrdinalIgnoreCase) ||
+                l.Contains("No start code", StringComparison.OrdinalIgnoreCase) ||
+                l.Contains("Conversion failed", StringComparison.OrdinalIgnoreCase));
+            var msg = string.Join(" | ", relevant);
+            if (string.IsNullOrEmpty(msg))
+                msg = stderr.Length > 200 ? stderr[..200] + "..." : stderr;
+            Log.Error($"[ffmpeg] Failed (exit {process.ExitCode}): {msg}");
             throw new Exception(
                 $"ffmpeg encode failed (exit {process.ExitCode})\n{stderr}");
         }
 
-        var outSize = new FileInfo(outputFile).Length;
-        Console.Error.WriteLine($"[ffmpeg] Done: {Path.GetFileName(outputFile)} ({outSize / 1024.0 / 1024:F1} MB)");
         progress?.Report(100);
     }
 
@@ -201,8 +208,8 @@ public class HevcEncodingService
                 if (proc.ExitCode == 0)
                 {
                     var firstLine = proc.StandardOutput.ReadLine() ?? "";
-                    Console.Error.WriteLine($"[ffmpeg] 已找到: {candidate}");
-                    Console.Error.WriteLine($"[ffmpeg] 版本: {firstLine}");
+                    Log.Info($"[ffmpeg] 已找到: {candidate}");
+                    Log.Info($"[ffmpeg] 版本: {firstLine}");
                     return candidate;
                 }
             }

@@ -61,18 +61,18 @@ public class FlvDownloadService
         byte[]? segmentPrefix = null;
         var seg1Raw = new List<byte>(65536);
         var metadataSkipped = false;
-        var shutdownRequested = false;
+        _shutdownRequested = false;
         var shutdownStart = TimeSpan.Zero;
 
         try
         {
             while (true)
             {
-                if (token.IsCancellationRequested && !shutdownRequested)
+                if (token.IsCancellationRequested && !_shutdownRequested)
                 {
-                    shutdownRequested = true;
+                    _shutdownRequested = true;
                     shutdownStart = stopwatch.Elapsed;
-                    Console.Error.WriteLine("\n[下载] 正在等待可截断点后停止...");
+                    Log.Info("[下载] 正在等待可截断点后停止...");
                 }
 
                 if (currentSegment == null)
@@ -81,57 +81,89 @@ public class FlvDownloadService
                     currentSegmentPath = Path.Combine(dir,
                         $"{baseName}_seg{segmentIndex:D3}.flv");
                     currentSegment = new FileStream(
-                        currentSegmentPath, FileMode.Create, FileAccess.Write,
+                        currentSegmentPath, FileMode.Create, FileAccess.ReadWrite,
                         FileShare.Read, 81920, true);
                     segmentStartTime = stopwatch.Elapsed;
                     segmentFiles.Add(currentSegmentPath);
 
-                    if (segmentIndex == 1)
+                    if (segmentIndex >= 2)
                     {
-                        // Segment 1: nothing extra to write before the main loop data
-                    }
-                    else if (segmentPrefix != null)
-                    {
-                        var expectedPts = (segmentIndex - 1) * (long)segDuration.TotalMilliseconds;
-                        segmentPrefix = AdjustCodecPts(segmentPrefix, expectedPts, expectedPts);
-                        await currentSegment.WriteAsync(
-                            segmentPrefix, 0, segmentPrefix.Length, CancellationToken.None);
-
-                        var initBuf = new byte[81920];
-                        var initRead = await responseStream.ReadAsync(
-                            initBuf.AsMemory(0, initBuf.Length), CancellationToken.None);
-                        if (initRead > 0)
+                        // 分段 2+：始终写入 FLV 头（含代码头或最小头），确保文件可被 ffmpeg 识别
+                        byte[] segStart;
+                        if (segmentPrefix != null)
                         {
-                            int firstTagStart = -1;
+                            var expectedPts = (segmentIndex - 1) * (long)segDuration.TotalMilliseconds;
+                            segStart = AdjustCodecPts(segmentPrefix, expectedPts, expectedPts);
+                        }
+                        else
+                        {
+                            // 代码头未就绪时写入最小 FLV 头
+                            segStart =
+                            [
+                                0x46, 0x4C, 0x56,       // "FLV"
+                                0x01,                   // version 1
+                                0x05,                   // flags: audio+video
+                                0x00, 0x00, 0x00, 0x09, // header size = 9
+                                0x00, 0x00, 0x00, 0x00  // PreviousTagSize0 = 0
+                            ];
+                        }
+                        await currentSegment.WriteAsync(
+                            segStart, 0, segStart.Length, CancellationToken.None);
+
+                        // 从流中读取数据，扫描首个有效 FLV tag 边界（最多 256KB），
+                        // 避免大视频帧跨段边界时写入裸流中间数据。
+                        var initBuf = new byte[262144];
+                        var totalInit = 0;
+                        var foundTag = false;
+                        var tagPos = -1;
+                        while (!foundTag && totalInit < initBuf.Length)
+                        {
+                            var chunk = await responseStream.ReadAsync(
+                                initBuf.AsMemory(totalInit, initBuf.Length - totalInit), token);
+                            if (chunk == 0) break;
+                            totalInit += chunk;
+
                             var p = 0;
-                            while (p + 15 <= initRead)
+                            while (p + 15 <= totalInit)
                             {
-                                if (!IsValidTag(initBuf, p, initRead)) { p++; continue; }
+                                if (!IsValidTag(initBuf, p, totalInit)) { p++; continue; }
                                 var ds = (initBuf[p + 1] << 16) | (initBuf[p + 2] << 8) | initBuf[p + 3];
                                 var tagEnd = p + 11 + ds;
                                 var nextP = tagEnd + 4;
-                                if (nextP + 15 <= initRead)
+                                if (nextP + 15 <= totalInit)
                                 {
-                                    // 双校验：确认下一个 tag 同样有效，排除假阳性
-                                    if (!IsValidTag(initBuf, nextP, initRead)) { p++; continue; }
+                                    if (!IsValidTag(initBuf, nextP, totalInit)) { p++; continue; }
                                 }
                                 else
                                 {
-                                    // 数据不足无法校验下一 tag — 不接受此候选，继续扫描
                                     p++; continue;
                                 }
-                                firstTagStart = p;
+                                tagPos = p;
+                                foundTag = true;
                                 break;
                             }
-                            var writeFrom = firstTagStart >= 0 ? firstTagStart : 0;
-                            await currentSegment.WriteAsync(
-                                initBuf, writeFrom, initRead - writeFrom, CancellationToken.None);
+                        }
+                        if (totalInit > 0)
+                        {
+                            // 未找到合法 tag 时舍弃此块数据（跨段残余），让主循环写后续干净数据
+                            var writeFrom = foundTag ? tagPos : totalInit;
+                            if (writeFrom < totalInit)
+                                await currentSegment.WriteAsync(
+                                    initBuf, writeFrom, totalInit - writeFrom, CancellationToken.None);
                         }
                     }
                 }
 
-                var bytesRead = await responseStream.ReadAsync(
-                    buffer, 0, buffer.Length, token);
+                var bytesRead = 0;
+                try
+                {
+                    bytesRead = await responseStream.ReadAsync(
+                        buffer, 0, buffer.Length, token);
+                }
+                catch when (_shutdownRequested)
+                {
+                    break;
+                }
                 if (bytesRead == 0) break;
 
                 var bytesToLog = bytesRead;
@@ -193,12 +225,44 @@ public class FlvDownloadService
 
                 if (segmentElapsed >= segDuration)
                 {
+                    // 段1未找到代码头（AVC/HEVC sequence header + AAC header）时暂不分段，
+                    // 确保分段2+可独立解码。最长等待3倍 segDuration 后强制分。
+                    if (segmentIndex == 1 && segmentPrefix == null && segmentElapsed < segDuration * 3)
+                        continue;
+
                     var minSegBytes = segmentPrefix != null
                         ? segmentPrefix.Length + 4096 : 4096;
                     if (segmentIndex > 0 && currentSegment!.Length < minSegBytes)
                         continue;
 
                     await currentSegment.FlushAsync(CancellationToken.None);
+
+                    // 截断至末个完整 FLV tag 边界，确保大帧跨段时前段尾部不损坏
+                    if (currentSegment!.Length > 13)
+                    {
+                        var fileLen = currentSegment.Length;
+                        var scanBytes = (int)Math.Min(fileLen, 262144);
+                        var scanBuf = new byte[scanBytes];
+                        currentSegment.Seek(-scanBytes, SeekOrigin.End);
+                        _ = await currentSegment.ReadAsync(
+                            scanBuf, 0, scanBytes, CancellationToken.None);
+                        var boundary = FindLastTagBoundary(scanBuf, 0, scanBytes);
+                        if (boundary >= 13 && boundary < scanBytes)
+                            currentSegment.SetLength(fileLen - (scanBytes - boundary));
+                        else if (boundary < 0 && fileLen > 1048576)
+                        {
+                            // 256KB 内找不到边界（大帧跨段），扩大为 1MB 再试
+                            var scanBytes2 = (int)Math.Min(fileLen, 1048576);
+                            var scanBuf2 = new byte[scanBytes2];
+                            currentSegment.Seek(-scanBytes2, SeekOrigin.End);
+                            _ = await currentSegment.ReadAsync(
+                                scanBuf2, 0, scanBytes2, CancellationToken.None);
+                            boundary = FindLastTagBoundary(scanBuf2, 0, scanBytes2);
+                            if (boundary >= 13 && boundary < scanBytes2)
+                                currentSegment.SetLength(fileLen - (scanBytes2 - boundary));
+                        }
+                    }
+
                     await currentSegment.DisposeAsync();
                     var completedPath = currentSegmentPath!;
                     var completedIndex = segmentIndex;
@@ -222,15 +286,34 @@ public class FlvDownloadService
                     currentSegment = null;
                     currentSegmentPath = null;
 
-                    if (shutdownRequested) break;
+                    if (_shutdownRequested) break;
                 }
             }
+        }
+        catch (Exception ex) when (!ct.IsCancellationRequested)
+        {
+            Log.Error($"[下载错误] {ex.Message}");
+            // 即使传输错误仍继续到 finally，让已下载分段能进入编码/合并
         }
         finally
         {
             if (currentSegment != null)
             {
                 await currentSegment.FlushAsync(CancellationToken.None);
+
+                if (currentSegment.Length > 13)
+                {
+                    var fileLen = currentSegment.Length;
+                    var scanBytes = (int)Math.Min(fileLen, 262144);
+                    var scanBuf = new byte[scanBytes];
+                    currentSegment.Seek(-scanBytes, SeekOrigin.End);
+                    _ = await currentSegment.ReadAsync(
+                        scanBuf, 0, scanBytes, CancellationToken.None);
+                    var boundary = FindLastTagBoundary(scanBuf, 0, scanBytes);
+                    if (boundary >= 13 && boundary < scanBytes)
+                        currentSegment.SetLength(fileLen - (scanBytes - boundary));
+                }
+
                 await currentSegment.DisposeAsync();
                 var finalPath = currentSegmentPath!;
                 var fileSize = new FileInfo(finalPath).Length;
@@ -268,9 +351,12 @@ public class FlvDownloadService
 
     public void Cancel()
     {
+        _shutdownRequested = true;
         _cancelCts?.Cancel();
         _http.CancelPendingRequests();
     }
+
+    private volatile bool _shutdownRequested;
 
     private static bool TryExtractFlvPrefix(List<byte> raw, out byte[] prefix)
     {
@@ -284,11 +370,11 @@ public class FlvDownloadService
 
         var pos = 13;
         byte[]? avcHeader = null;
+        byte[]? hevcHeader = null;
         byte[]? aacHeader = null;
 
         while (pos + 11 <= raw.Count)
         {
-            var tagStart = pos;
             var tagType = raw[pos];
             var dataSize = (raw[pos + 1] << 16) | (raw[pos + 2] << 8) | raw[pos + 3];
             var tagLen = 11 + dataSize;
@@ -306,6 +392,12 @@ public class FlvDownloadService
                         var avcPacketType = tagData[12];
                         if (avcPacketType == 0)
                             avcHeader ??= tagData;
+                    }
+                    else if (codecId == 12)
+                    {
+                        var hevcPacketType = tagData[12];
+                        if (hevcPacketType == 0)
+                            hevcHeader ??= tagData;
                     }
                 }
             }
@@ -326,7 +418,8 @@ public class FlvDownloadService
             pos += tagLen + 4;
         }
 
-        if ((hasVideo && avcHeader == null) || (hasAudio && aacHeader == null))
+        // 仅视频需要代码头（HEVC 编码需要 SPS/PPS），音频 -c:a copy 无需 extradata
+        if (hasVideo && avcHeader == null && hevcHeader == null)
             return false;
 
         using var ms = new MemoryStream();
@@ -337,6 +430,12 @@ public class FlvDownloadService
         {
             ms.Write(avcHeader, 0, avcHeader.Length);
             WriteU32BE(ms, avcHeader.Length);
+        }
+
+        if (hevcHeader != null)
+        {
+            ms.Write(hevcHeader, 0, hevcHeader.Length);
+            WriteU32BE(ms, hevcHeader.Length);
         }
 
         if (aacHeader != null)
@@ -383,6 +482,41 @@ public class FlvDownloadService
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// 扫描字节范围，返回末个完整 FLV tag 结束位置（含 PreviousTagSize）的偏移，
+    /// 未找到返回 -1。
+    /// </summary>
+    private static int FindLastTagBoundary(byte[] buffer, int offset, int count)
+    {
+        var end = offset + count;
+        var last = -1;
+        var pos = offset;
+
+        while (pos + 15 <= end)
+        {
+            if (!IsValidTag(buffer, pos, end)) { pos++; continue; }
+
+            var ds = (buffer[pos + 1] << 16) | (buffer[pos + 2] << 8) | buffer[pos + 3];
+            var tagEnd = pos + 11 + ds;
+            var ptsEnd = tagEnd + 4;
+            if (ptsEnd > end) break;
+
+            var ps = (buffer[tagEnd] << 24) | (buffer[tagEnd + 1] << 16) |
+                     (buffer[tagEnd + 2] << 8) | buffer[tagEnd + 3];
+            if (ps == 11 + ds)
+            {
+                last = ptsEnd;
+                pos = ptsEnd;
+            }
+            else
+            {
+                pos++;
+            }
+        }
+
+        return last;
     }
 
     /// <summary>校验 buf[pos] 是否为一个合法的 FLV tag 头：tag 类型 + streamID=0 + PreviousTagSize 匹配。</summary>

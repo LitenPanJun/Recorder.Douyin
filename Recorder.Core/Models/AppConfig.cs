@@ -10,6 +10,7 @@ public class StreamerConfig
 {
     public string Id { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
+    public string UniqueId { get; set; } = string.Empty;
     public string RoomId { get; set; } = string.Empty;
     public string? Quality { get; set; }
     public bool? EnableHevc { get; set; }

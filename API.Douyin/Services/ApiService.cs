@@ -19,6 +19,34 @@ public class ApiService
         _signature = signature;
     }
 
+    public async Task<LiveStatusInfo> GetLiveStatusAsync(string roomId)
+    {
+        try
+        {
+            if (roomId.Length <= 16)
+            {
+                var data = await GetRoomDataByApiAsync(roomId);
+                var roomData = data["data"]?[0];
+                return new LiveStatusInfo
+                {
+                    IsLive = roomData?["status"]?.ToObject<int>() == 2,
+                    Title = roomData?["title"]?.ToString() ?? ""
+                };
+            }
+            var roomJson = await GetRoomDataByRoomIdAsync(roomId);
+            var room = roomJson["data"]?["room"];
+            return new LiveStatusInfo
+            {
+                IsLive = room?["status"]?.ToObject<int>() == 2,
+                Title = room?["title"]?.ToString() ?? ""
+            };
+        }
+        catch
+        {
+            return new LiveStatusInfo();
+        }
+    }
+
     private async Task<Dictionary<string, string>> GetHeadersAsync(string? referer = null)
     {
         var cookie = await _cookieService.GetCookieAsync();
@@ -566,6 +594,9 @@ public class ApiService
             ["Authority"] = Authority
         });
 
+        if (string.IsNullOrEmpty(headCookie))
+            headCookie = await _cookieService.GetCookieAsync();
+
         var resp = await HttpUtils.GetStringAsync($"https://live.douyin.com/{webRid}", new()
         {
             ["User-Agent"] = _signature.GetUserAgent(),
@@ -579,7 +610,13 @@ public class ApiService
         var json = match.Success ? match.Groups[0].Value : "";
 
         if (string.IsNullOrEmpty(json))
-            throw new Exception("无法从HTML解析直播间数据");
+        {
+            if (resp.Contains("验证码") || resp.Contains("captcha", StringComparison.OrdinalIgnoreCase))
+                throw new CaptchaRequiredException($"https://live.douyin.com/{webRid}");
+
+            var snippet = resp.Length > 200 ? resp[..200] + "..." : resp;
+            throw new Exception($"无法从HTML解析直播间数据 (cookie={headCookie?.Length ?? 0}chars, resp={resp.Length}chars, 前200={snippet})");
+        }
 
         json = json.Trim().Replace("\\\"", "\"").Replace("\\\\", "\\").Replace("]\\n", "");
         return JObject.Parse(json)["state"] ?? throw new Exception("状态数据为空");

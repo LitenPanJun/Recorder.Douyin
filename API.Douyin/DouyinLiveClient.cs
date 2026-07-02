@@ -31,6 +31,11 @@ public class DouyinLiveClient
         return await _api.GetRoomDetailByUserUniqueIdAsync(uniqueId);
     }
 
+    public async Task<LiveStatusInfo> GetLiveStatusAsync(string roomId)
+    {
+        return await _api.GetLiveStatusAsync(roomId);
+    }
+
     public async Task<List<PlayQuality>> GetPlayQualitiesAsync(LiveRoomDetail detail)
     {
         return await _api.GetPlayQualitiesAsync(detail);
@@ -39,5 +44,10 @@ public class DouyinLiveClient
     public void SetCookie(string cookie)
     {
         _cookies.SetCookie(cookie);
+    }
+
+    public void ClearValidatedCookie()
+    {
+        _cookies.ClearValidatedCookie();
     }
 }

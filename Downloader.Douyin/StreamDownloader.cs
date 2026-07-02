@@ -1,19 +1,19 @@
 using System.Diagnostics;
 using Downloader.Douyin.Models;
 using Downloader.Douyin.Services;
+using Recorder.Shared;
 
 namespace Downloader.Douyin;
 
 public class StreamDownloader
 {
     private readonly FlvDownloadService _flvDownloader;
-    private readonly HevcEncodingService _hevcEncoder;
-    private static readonly SemaphoreSlim _encodeThrottle = new(1, 1);
+    private readonly HevcEncodingService _hevcEncoder = new();
+    private readonly SemaphoreSlim _encodeThrottle = new(1, 1);
 
     public StreamDownloader()
     {
         _flvDownloader = new FlvDownloadService();
-        _hevcEncoder = new HevcEncodingService();
     }
 
     public async Task<DownloadResult> DownloadAsync(
@@ -35,13 +35,13 @@ public class StreamDownloader
         if (enableHevc && !HevcEncodingService.IsAvailable)
         {
             var reason = HevcEncodingService.NotAvailableReason ?? "未知原因";
-            Console.Error.WriteLine($"[错误] 无法启用 HEVC 编码: {reason}");
-            Console.Error.WriteLine("[错误] 将使用原始 FLV 格式继续下载");
+            Log.Error($"[错误] 无法启用 HEVC 编码: {reason}");
+            Log.Warn("[警告] 将使用原始 FLV 格式继续下载");
             enableHevc = false;
         }
 
         if (enableHevc)
-            Console.Error.WriteLine($"[编码] 并发限制: 每次 1 个分段 (SemaphoreSlim)");
+            Log.Info($"[编码] 并发限制: 每次 1 个分段 (SemaphoreSlim)");
 
         DownloadResult? downloadResult = null;
         try
@@ -56,9 +56,10 @@ public class StreamDownloader
 
                     var task = Task.Run(async () =>
                     {
-                        await _encodeThrottle.WaitAsync(CancellationToken.None);
                         try
                         {
+                            await _encodeThrottle.WaitAsync(ct);
+
                             var mkvPath = Path.ChangeExtension(flvPath, ".mkv");
 
                             progress?.Report(new DownloadProgress
@@ -66,13 +67,11 @@ public class StreamDownloader
                                 CurrentSegment = $"[{index}] HEVC 编码中...",
                                 SegmentsCompleted = index
                             });
-                            Console.Error.WriteLine(
-                                $"[编码] 排队中: 分段 {index}");
 
                             var fi = new FileInfo(flvPath);
                             if (!fi.Exists || fi.Length < 1024)
                             {
-                                Console.Error.WriteLine(
+                                Log.Error(
                                     $"[编码错误] 分段 {index}: 源文件过小或不存在 ({fi.Length} B)，跳过");
                                 Interlocked.Increment(ref encodeFail);
                                 return;
@@ -83,7 +82,7 @@ public class StreamDownloader
                                 if (await fs.ReadAsync(sig, 0, 3, CancellationToken.None) != 3 ||
                                     sig[0] != 'F' || sig[1] != 'L' || sig[2] != 'V')
                                 {
-                                    Console.Error.WriteLine(
+                                    Log.Error(
                                         $"[编码错误] 分段 {index}: 不是合法 FLV 文件，跳过");
                                     Interlocked.Increment(ref encodeFail);
                                     return;
@@ -93,14 +92,10 @@ public class StreamDownloader
                             var sw = Stopwatch.StartNew();
                             await _hevcEncoder.EncodeAsync(
                                 flvPath, mkvPath, hevcCrf,
-                                progress: null,
                                 ct: CancellationToken.None);
                             sw.Stop();
 
                             File.Delete(flvPath);
-
-                            Console.Error.WriteLine(
-                                $"[编码] 分段 {index}: 完成 ✓ ({sw.Elapsed.TotalMinutes:F1}分)");
 
                             progress?.Report(new DownloadProgress
                             {
@@ -109,14 +104,14 @@ public class StreamDownloader
                             });
                             Interlocked.Increment(ref encodeOk);
                         }
-                        catch (OperationCanceledException)
+                        catch (OperationCanceledException) when (ct.IsCancellationRequested)
                         {
-                            Console.Error.WriteLine($"[编码] 分段 {index}: 已取消");
+                            Log.Info($"[编码] 分段 {index}: 已取消");
                             Interlocked.Increment(ref encodeCancel);
                         }
                         catch (Exception ex)
                         {
-                            Console.Error.WriteLine(
+                            Log.Error(
                                 $"[编码错误] 分段 {index}: {ex.Message}");
                             progress?.Report(new DownloadProgress
                             {
@@ -139,11 +134,11 @@ public class StreamDownloader
         }
         catch (OperationCanceledException)
         {
-            Console.Error.WriteLine("\n[下载] 用户已取消，正在等待 {0} 个编码任务完成...", encodeTasks.Count);
+            Log.Info($"[下载] 用户已取消，正在等待 {encodeTasks.Count} 个编码任务完成...");
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"[下载错误] {ex.Message}");
+            Log.Error($"[下载错误] {ex.Message}");
         }
 
         if (enableHevc && encodeTasks.Count > 0)
@@ -152,7 +147,7 @@ public class StreamDownloader
             {
                 CurrentSegment = $"等待 {encodeTasks.Count} 个 HEVC 编码任务完成..."
             });
-            Console.Error.WriteLine($"[编码] 等待 {encodeTasks.Count} 个编码任务完成...");
+            Log.Info($"[编码] 等待 {encodeTasks.Count} 个编码任务完成...");
 
             try
             {
@@ -160,14 +155,14 @@ public class StreamDownloader
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"[编码] 部分任务失败: {ex.Message}");
+                Log.Error($"[编码] 部分任务失败: {ex.Message}");
             }
 
-            Console.Error.WriteLine(
+            Log.Info(
                 $"[编码] 汇总: {encodeOk}/{encodeTasks.Count} 成功, {encodeFail} 失败, {encodeCancel} 取消");
 
             if (encodeFail == 0 && encodeCancel == 0)
-                Console.Error.WriteLine("[编码] 所有编码任务处理完毕");
+                Log.Info("[编码] 所有编码任务处理完毕");
         }
 
         return new DownloadResult

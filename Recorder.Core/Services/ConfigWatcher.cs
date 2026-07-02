@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Recorder.Core.Models;
+using Recorder.Shared;
 
 namespace Recorder.Core.Services;
 
@@ -60,6 +61,7 @@ public class ConfigWatcher : IDisposable
 
     private void ReloadConfig()
     {
+        if (_isSaving) return;
         if (!_dirty) return;
         _dirty = false;
 
@@ -71,9 +73,43 @@ public class ConfigWatcher : IDisposable
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"[配置] 重载失败: {ex.Message}");
+            Log.Error($"[配置] 重载失败: {ex.Message}");
         }
     }
+
+    public void UpdateStreamerRoomId(string streamerId, string newRoomId)
+    {
+        lock (_lock)
+        {
+            var streamer = _currentConfig.Streamers.FirstOrDefault(s => s.Id == streamerId);
+            if (streamer == null || streamer.RoomId == newRoomId)
+                return;
+
+            streamer.RoomId = newRoomId;
+            SaveConfigInternal();
+        }
+    }
+
+    private void SaveConfigInternal()
+    {
+        _isSaving = true;
+        if (_watcher != null) _watcher.EnableRaisingEvents = false;
+        try
+        {
+            var json = JsonSerializer.Serialize(_currentConfig, JsonOptions);
+            var tmpPath = _configPath + ".tmp";
+            File.WriteAllText(tmpPath, json);
+            if (File.Exists(_configPath)) File.Delete(_configPath);
+            File.Move(tmpPath, _configPath);
+        }
+        finally
+        {
+            if (_watcher != null) _watcher.EnableRaisingEvents = true;
+            _isSaving = false;
+        }
+    }
+
+    private volatile bool _isSaving;
 
     private AppConfig LoadConfig()
     {
