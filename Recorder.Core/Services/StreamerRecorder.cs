@@ -123,6 +123,7 @@ public class StreamerRecorder
     {
         if (_stopRequested || _isRecording) return;
         _isRecording = true;
+        Log.Info($"[录制] 开始 roomId={detail.RoomId} title={detail.Title}");
         _recordingTask = RecordAndFinishAsync(detail);
     }
 
@@ -223,6 +224,7 @@ public class StreamerRecorder
 
         if (detail.DanmakuData != null)
         {
+            Log.Info($"[弹幕] 启动 roomId={detail.DanmakuData.RoomId} webRid={detail.DanmakuData.WebRid}");
             var danmakuArgs = new DouyinDanmakuArgs(
                 detail.DanmakuData.WebRid,
                 detail.DanmakuData.RoomId,
