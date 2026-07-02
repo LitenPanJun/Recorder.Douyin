@@ -2,6 +2,7 @@ using System.IO.Compression;
 using System.Text;
 using DouyinDanmaku.Models;
 using ProtoBuf;
+using Recorder.Shared;
 
 namespace DouyinDanmaku.Services;
 
@@ -98,6 +99,7 @@ public class DouyinDanmakuClient : IDisposable
 
     private void OnWsReady()
     {
+        Log.Info($"[弹幕] WebSocket 已连接 roomId={_args?.RoomId}");
         OnReady?.Invoke();
         SendJoinRoom();
     }
