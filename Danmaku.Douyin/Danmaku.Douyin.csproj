@@ -5,8 +5,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <RootNamespace>DouyinDanmaku</RootNamespace>
-    <Version>1.0.1</Version>
-    <FileVersion>1.0.1</FileVersion>
+    <Version>1.0.2</Version>
+    <FileVersion>1.0.2</FileVersion>
   </PropertyGroup>
 
   <ItemGroup>
