@@ -89,19 +89,14 @@ public class StreamerRecorder
             Console.WriteLine("═══════════════════════════════════════════");
             Console.WriteLine("  需要手动完成验证码:");
             Console.WriteLine($"  浏览器已打开: {cap.Url}");
-            Console.WriteLine("  完成后按 F12 → Console → 输入:");
-            Console.WriteLine("    copy(document.cookie)");
-            Console.WriteLine("  然后粘贴到这里，按回车:");
-            Console.Write("  cookie> ");
-            var pasted = Console.ReadLine()?.Trim();
-            if (!string.IsNullOrEmpty(pasted))
-            {
-                _liveClient.SetCookie(pasted);
-                Log.Info("[验证码] cookie 已更新，重新请求...");
-                try { return await ResolveRoomAsync(ct); }
-                catch (CaptchaRequiredException) { }
-                catch (Exception ex) { Log.Error(ex); }
-            }
+            Console.WriteLine("  完成验证后，按回车继续...");
+            Console.Write("  > ");
+            Console.ReadLine();
+            Log.Info("[验证码] 用户已确认完成，重新请求...");
+            _liveClient.ClearValidatedCookie();
+            try { return await ResolveRoomAsync(ct); }
+            catch (CaptchaRequiredException) { Log.Warn("[验证码] 验证仍未通过"); }
+            catch (Exception ex) { Log.Error(ex); }
             SetStatus("等待中", "验证码未通过");
             return null;
         }
